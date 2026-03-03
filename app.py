@@ -1,0 +1,42 @@
+"""Точка входа: aiohttp-приложение с webhook для aiogram 3.x."""
+
+from aiohttp import web
+
+from aiogram import Bot, Dispatcher
+from aiogram.types import Update
+
+import config
+from handlers import registration_router, start_router
+
+bot = Bot(token=config.BOT_TOKEN)
+dp = Dispatcher()
+dp.include_router(start_router)
+dp.include_router(registration_router)
+
+
+async def on_startup(_: web.Application) -> None:
+    await bot.set_webhook(config.WEBHOOK_URL)
+
+
+async def on_shutdown(_: web.Application) -> None:
+    await bot.delete_webhook()
+    await bot.session.close()
+
+
+async def handle_webhook(request: web.Request) -> web.Response:
+    data = await request.json()
+    update = Update.model_validate(data)
+    await dp.feed_update(bot, update)
+    return web.Response()
+
+
+def create_app() -> web.Application:
+    app = web.Application()
+    app.router.add_post(config.WEBHOOK_PATH, handle_webhook)
+    app.on_startup.append(on_startup)
+    app.on_shutdown.append(on_shutdown)
+    return app
+
+
+if __name__ == "__main__":
+    web.run_app(create_app(), host="127.0.0.1", port=8000)
