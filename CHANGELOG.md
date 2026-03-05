@@ -2,6 +2,48 @@
 
 ## [Unreleased]
 
+### UX text polishing
+
+- **START_TEXT**: emojis 📍 📊 🔄, improved formatting.
+- **Main menu buttons**: 🚀 Получить доступ, 💬 Поддержка (was: 🔓 Получить доступ, 💬 Связаться с поддержкой).
+- **GET_ACCESS_SCREEN_TEXT**: **Intrade Bar** (Markdown), ⚙️ before algorithm line.
+- **NO_REGISTER_SCREEN_TEXT**: 🔗 before affiliate link.
+- **RECONNECT_INSTRUCTION_TEXT**: ☝️ before copy hint, code block for support message template.
+- **ID_SUBMITTED_TEXT**: ✅ prefix.
+- **docs/TEXTS_FUNNEL.md**: updated with new texts and button labels.
+
+### Stage 3: UX Inline Buttons — документация и проверка
+
+- **docs/TEXTS_FUNNEL.md**: уточнено, что используются только Inline-кнопки; добавлена таблица callback_data (keyboards → handlers); обновлена таблица навигации «Назад»; уточнён экран 3d (два варианта текста: AWAIT_ID_TEXT / AWAIT_RECONNECT_ID_TEXT).
+- Проверка: callback_data уникальны (main:, account:, register:, existing:, reconnect:, await_id:); все переходы «Назад» корректны.
+
+### Stage 2: Text updates
+
+- **handlers/start.py**: `START_TEXT` shortened; `GET_ACCESS_SCREEN_TEXT` simplified.
+- **handlers/registration.py**: `NO_REGISTER_SCREEN_TEXT`, `RECONNECT_INSTRUCTION_TEXT`, `ID_SUBMITTED_TEXT` updated.
+- После отправки ID главное меню не показывается (только текст подтверждения).
+- **docs/TEXTS_FUNNEL.md**: обновлены тексты по этапам воронки.
+
+### Stage 1: Inline keyboards migration
+
+- **keyboards/main_menu.py**, **keyboards/__init__.py**: все ReplyKeyboard заменены на InlineKeyboard; добавлен `get_await_id_keyboard()` для экранов ожидания ID (3b, 3d).
+- **handlers/start.py**, **handlers/registration.py**: обработчики кнопок переведены с `F.text` на `callback_query`.
+- Экран 3e (переподключение): кнопка «Скопировать текст» удалена.
+
+### Stage 1: Screen 3e — Запрос на переподключение
+
+- **handlers/registration.py**: шаг `reconnect_instruction`; константы `RECONNECT_INSTRUCTION_TEXT`, `AWAIT_RECONNECT_ID_TEXT`; inline-клавиатура «Ввести ID», «Назад»; возврат на «Есть аккаунт» из 3e; возврат на 3e из «Ввести ID» при переходе из 3e.
+- **docs/TEXTS_FUNNEL.md**: обновлён раздел 3e, правила навигации «Назад», сводка констант.
+- Удалена константа `RECONNECT_SENT_TEXT`.
+
+### Stage 1: Контент и кнопки MVP (Content MVP Bot plan)
+
+- **keyboards/main_menu.py**: 8 button constants (BTN_*) with emoji; all keyboard builders use them.
+- **keyboards/__init__.py**: re-exports the 8 BTN_* constants from main_menu for handlers.
+- **handlers/start.py**: START_TEXT, GET_ACCESS_SCREEN_TEXT, SUPPORT_WAIT_TEXT; button filters use keyboard constants (F.text == BTN_*).
+- **handlers/registration.py**: all screen text constants; all button filters use keyboard constants; cross-import of GET_ACCESS_SCREEN_TEXT from start.
+- Content/buttons MVP complete: funnel texts and buttons use short, structured wording and emoji; button labels centralized in keyboards.
+
 ### Stage 7: Очистка и интеграция — MVP funnel complete
 
 - **Removed**: `handlers/admin.py` (approve/reject callbacks)

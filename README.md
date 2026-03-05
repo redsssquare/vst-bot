@@ -1,6 +1,6 @@
 # Telegram Bot (MVP)
 
-Aiogram 3.x bot with aiohttp webhook. **MVP funnel complete.**
+Aiogram 3.x bot with aiohttp webhook. **MVP funnel complete.** Content/buttons MVP: funnel texts and buttons use short, structured wording and emoji; button labels are centralized in `keyboards/main_menu.py` (BTN_* constants); all keyboards are InlineKeyboard; handlers use `callback_query`.
 
 ## Structure
 
@@ -8,8 +8,8 @@ Aiogram 3.x bot with aiohttp webhook. **MVP funnel complete.**
 telegram-bot/
 ├── app.py          # aiohttp app, webhook handler
 ├── config.py       # BOT_TOKEN, webhook, ADMIN_GROUP_CHAT_ID, SIGNAL_GROUP_LINK, AFFILIATE_LINK
-├── keyboards/      # Reply and inline keyboards
-│   ├── main_menu.py    # Main menu, account status, new/existing registration keyboards
+├── keyboards/      # Inline keyboards
+│   ├── main_menu.py    # BTN_* constants (8 buttons with emoji), main/account/new/existing keyboards
 │   └── inline_admin.py # Approve/reject inline keyboard
 ├── handlers/
 │   ├── start.py        # /start, main menu, «Получить доступ», «Связаться с поддержкой»

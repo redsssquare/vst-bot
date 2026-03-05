@@ -1,16 +1,19 @@
 """Обработчики регистрации — ветки «Нет, зарегистрироваться» и «Да, есть аккаунт»."""
 
 from aiogram import F, Router
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 import config
 import state_manager
-from handlers.start import START_TEXT
+from handlers.start import GET_ACCESS_SCREEN_TEXT, START_TEXT
 from keyboards import (
     get_account_status_keyboard,
+    get_await_id_keyboard,
     get_existing_account_keyboard,
     get_main_menu_keyboard,
     get_new_registration_keyboard,
+    get_post_id_success_keyboard,
+    get_reconnect_instruction_keyboard,
 )
 
 router = Router(name="registration")
@@ -59,46 +62,88 @@ async def _handle_id_submission(
     await message.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
     user_id = message.from_user.id if message.from_user else 0
     state_manager.set_step(user_id, "main")
-    await message.answer(user_reply, reply_markup=get_main_menu_keyboard())
+    await message.answer(user_reply, reply_markup=get_post_id_success_keyboard())
 
 
-@router.message(
-    F.text.casefold() == "нет, зарегистрироваться",
-    lambda m: _step_is_choose_account_status(m.from_user.id) if m.from_user else False,
+NO_REGISTER_SCREEN_TEXT = (
+    "Чтобы подключиться к системе, зарегистрируйтесь по нашей партнёрской ссылке:\n\n"
+    "🔗 {affiliate_link}\n\n"
+    "⏱ Регистрация занимает 1–2 минуты.\n\n"
+    "Доступ к торговым решениям предоставляется бесплатно.\n\n"
+    "⬅️ После регистрации вернитесь в бот и нажмите «✅ Я зарегистрировался»."
 )
-async def handle_no_register(message: Message) -> None:
+AWAIT_ID_TEXT = "Отправьте ваш ID аккаунта (числом)."
+ID_ERROR_TEXT = "❗ID должен быть числом. Попробуйте ещё раз."
+ID_SUBMITTED_TEXT = "✅ ID получен. Мы проверим его и свяжемся с вами."
+EXISTING_ACCOUNT_SCREEN_TEXT = (
+    "Ваш аккаунт Intrade Bar зарегистрирован по нашей партнёрской ссылке?"
+)
+SUPPORT_SENT_TEXT = "Сообщение отправлено."
+
+RECONNECT_INSTRUCTION_TEXT = (
+    "Если аккаунт уже создан, его можно перевести под нашу партнёрскую ссылку.\n\n"
+    "Для этого напишите в поддержку **Intrade Bar**. 👇 Нажмите на текст, чтобы скопировать его.\n\n"
+    "```\nЗдравствуйте, переведите меня пожалуйста по партнёрской ссылке\n{affiliate_link}\n```\n\n"
+    "После ответа поддержки вернитесь сюда и отправьте ваш ID аккаунта."
+)
+AWAIT_RECONNECT_ID_TEXT = (
+    "Отправьте ваш **ID аккаунта InTradeBar**.\n"
+    "После проверки мы откроем доступ к сигнальной группе."
+)
+
+
+@router.callback_query(F.data == "account:no")
+async def handle_no_register(callback: CallbackQuery) -> None:
     """«Нет, зарегистрироваться»: ссылка и клавиатура, остаёмся в choose_account_status."""
-    link = config.AFFILIATE_LINK
-    text = (
-        f"Зарегистрируйтесь по партнёрской ссылке:\n{link}\n\n"
-        "После регистрации нажмите кнопку ниже."
-    )
-    await message.answer(text, reply_markup=get_new_registration_keyboard())
+    if not callback.from_user or not _step_is_choose_account_status(callback.from_user.id):
+        await callback.answer()
+        return
+    text = NO_REGISTER_SCREEN_TEXT.format(affiliate_link=config.AFFILIATE_LINK)
+    await callback.message.answer(text, reply_markup=get_new_registration_keyboard())
+    await callback.answer()
 
 
-@router.message(
-    F.text.casefold() == "я зарегистрировался",
-    lambda m: _step_is_choose_account_status(m.from_user.id) if m.from_user else False,
-)
-async def handle_registered_click(message: Message) -> None:
+@router.callback_query(F.data == "register:done")
+async def handle_registered_click(callback: CallbackQuery) -> None:
     """«Я зарегистрировался»: переводим в ожидание ID."""
-    user_id = message.from_user.id if message.from_user else 0
+    if not callback.from_user or not _step_is_choose_account_status(callback.from_user.id):
+        await callback.answer()
+        return
+    user_id = callback.from_user.id
     state_manager.set_step(user_id, "awaiting_new_registration_id")
-    await message.answer("Отправьте ваш ID аккаунта (числом).")
+    await callback.message.answer(AWAIT_ID_TEXT, reply_markup=get_await_id_keyboard())
+    await callback.answer()
 
 
-@router.message(
-    F.text.casefold() == "назад",
-    lambda m: _step_is_choose_account_status(m.from_user.id) if m.from_user else False,
-)
-async def handle_back_from_registration(message: Message) -> None:
+@router.callback_query(F.data == "account:back")
+async def handle_back_from_registration(callback: CallbackQuery) -> None:
     """«Назад» в choose_account_status: возврат в главное меню."""
-    user_id = message.from_user.id if message.from_user else 0
+    if not callback.from_user or not _step_is_choose_account_status(callback.from_user.id):
+        await callback.answer()
+        return
+    user_id = callback.from_user.id
     state_manager.set_step(user_id, "main")
-    await message.answer(
+    await callback.message.answer(
         START_TEXT,
         reply_markup=get_main_menu_keyboard(),
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "register:back")
+async def handle_back_from_no_register(callback: CallbackQuery) -> None:
+    """«Назад» с экрана NO_REGISTER: возврат к choose_account_status (GET_ACCESS)."""
+    if not callback.from_user or not _step_is_choose_account_status(callback.from_user.id):
+        await callback.answer()
+        return
+    user_id = callback.from_user.id
+    state_manager.set_step(user_id, "choose_account_status")
+    await callback.message.answer(
+        GET_ACCESS_SCREEN_TEXT,
+        reply_markup=get_account_status_keyboard(),
+        parse_mode="Markdown",
+    )
+    await callback.answer()
 
 
 @router.message(
@@ -109,59 +154,75 @@ async def handle_new_registration_id_input(message: Message) -> None:
     """Обработка ввода ID при state == awaiting_new_registration_id."""
     raw = (message.text or "").strip()
     if not raw.isdigit():
-        await message.answer("ID должен быть числом. Попробуйте ещё раз.")
+        await message.answer(ID_ERROR_TEXT)
         return
     await _handle_id_submission(
         message,
         broker_id=raw,
         admin_header="Новая регистрация",
         admin_type="Новая регистрация",
-        user_reply="ID получен. Ожидайте проверки.",
+        user_reply=ID_SUBMITTED_TEXT,
     )
 
 
 # --- Ветка «Да, есть аккаунт» ---
 
 
-@router.message(
-    F.text.casefold() == "да, есть аккаунт",
-    lambda m: _step_is_choose_account_status(m.from_user.id) if m.from_user else False,
-)
-async def handle_yes_existing_account(message: Message) -> None:
+@router.callback_query(F.data == "account:yes")
+async def handle_yes_existing_account(callback: CallbackQuery) -> None:
     """«Да, есть аккаунт»: текст из ТЗ и клавиатура, state existing_account_options."""
-    user_id = message.from_user.id if message.from_user else 0
+    if not callback.from_user or not _step_is_choose_account_status(callback.from_user.id):
+        await callback.answer()
+        return
+    user_id = callback.from_user.id
     state_manager.set_step(user_id, "existing_account_options")
-    text = (
-        "Если аккаунт зарегистрирован по нашей ссылке — отправьте ID. "
-        "Если нет — мы поможем переподключить его за несколько минут."
+    await callback.message.answer(
+        EXISTING_ACCOUNT_SCREEN_TEXT,
+        reply_markup=get_existing_account_keyboard(),
     )
-    await message.answer(text, reply_markup=get_existing_account_keyboard())
+    await callback.answer()
 
 
-@router.message(
-    F.text.casefold() == "ввести id",
-    lambda m: _step_is_existing_account_options(m.from_user.id) if m.from_user else False,
-)
-async def handle_enter_id(message: Message) -> None:
+@router.callback_query(F.data == "existing:enter_id")
+async def handle_enter_id(callback: CallbackQuery) -> None:
     """«Ввести ID»: переводим в awaiting_existing_id."""
-    user_id = message.from_user.id if message.from_user else 0
+    if not callback.from_user or not _step_is_existing_account_options(callback.from_user.id):
+        await callback.answer()
+        return
+    user_id = callback.from_user.id
     state_manager.set_step(user_id, "awaiting_existing_id")
-    await message.answer("Отправьте ваш ID аккаунта (числом).")
+    await callback.message.answer(AWAIT_ID_TEXT, reply_markup=get_await_id_keyboard())
+    await callback.answer()
 
 
-@router.message(
-    F.text.casefold() == "назад",
-    lambda m: _step_is_awaiting_existing_id(m.from_user.id) if m.from_user else False,
-)
-async def handle_back_from_awaiting_existing_id(message: Message) -> None:
-    """«Назад» из awaiting_existing_id: возврат к экрану «Ввести ID / Помогите»."""
-    user_id = message.from_user.id if message.from_user else 0
-    state_manager.set_step(user_id, "existing_account_options")
-    text = (
-        "Если аккаунт зарегистрирован по нашей ссылке — отправьте ID. "
-        "Если нет — мы поможем переподключить его за несколько минут."
-    )
-    await message.answer(text, reply_markup=get_existing_account_keyboard())
+@router.callback_query(F.data == "await_id:back")
+async def handle_await_id_back(callback: CallbackQuery) -> None:
+    """«Назад» из экранов ожидания ID: возврат на нужный экран."""
+    if not callback.from_user:
+        await callback.answer()
+        return
+    user_id = callback.from_user.id
+    step = state_manager.get_step(user_id)
+
+    if step == "awaiting_new_registration_id":
+        state_manager.set_step(user_id, "choose_account_status")
+        text = NO_REGISTER_SCREEN_TEXT.format(affiliate_link=config.AFFILIATE_LINK)
+        await callback.message.answer(text, reply_markup=get_new_registration_keyboard())
+    elif step == "awaiting_existing_id":
+        if state_manager.get_reconnect_flow(user_id):
+            state_manager.set_reconnect_flow(user_id, False)
+            state_manager.set_step(user_id, "reconnect_instruction")
+            text = RECONNECT_INSTRUCTION_TEXT.format(affiliate_link=config.AFFILIATE_LINK)
+            await callback.message.answer(
+                text, reply_markup=get_reconnect_instruction_keyboard(), parse_mode="Markdown"
+            )
+        else:
+            state_manager.set_step(user_id, "existing_account_options")
+            await callback.message.answer(
+                EXISTING_ACCOUNT_SCREEN_TEXT,
+                reply_markup=get_existing_account_keyboard(),
+            )
+    await callback.answer()
 
 
 @router.message(
@@ -172,46 +233,81 @@ async def handle_existing_id_input(message: Message) -> None:
     """Обработка ввода ID при state == awaiting_existing_id."""
     raw = (message.text or "").strip()
     if not raw.isdigit():
-        await message.answer("ID должен быть числом. Попробуйте ещё раз.")
+        await message.answer(ID_ERROR_TEXT)
         return
-    await _handle_id_submission(
-        message,
-        broker_id=raw,
-        admin_header="Пользователь с уже существующим аккаунтом",
-        admin_type="Уже был аккаунт",
-        user_reply="ID получен. Ожидайте проверки.",
-    )
-
-
-@router.message(
-    F.text.casefold() == "помогите переподключить",
-    lambda m: _step_is_existing_account_options(m.from_user.id) if m.from_user else False,
-)
-async def handle_reconnect_request(message: Message) -> None:
-    """«Помогите переподключить»: уведомление админу, ответ, main."""
-    user_info = _format_user_info(message)
-    admin_text = f"Запрос на переподключение аккаунта\n{user_info}"
-    await message.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
     user_id = message.from_user.id if message.from_user else 0
-    state_manager.set_step(user_id, "main")
-    await message.answer(
-        "Запрос отправлен. Мы свяжемся с вами.",
-        reply_markup=get_main_menu_keyboard(),
+    if state_manager.get_reconnect_flow(user_id):
+        state_manager.set_reconnect_flow(user_id, False)
+        await _handle_id_submission(
+            message,
+            broker_id=raw,
+            admin_header="Пользователь с уже существующим аккаунтом",
+            admin_type="Переподключение",
+            user_reply=ID_SUBMITTED_TEXT,
+        )
+    else:
+        await _handle_id_submission(
+            message,
+            broker_id=raw,
+            admin_header="Пользователь с уже существующим аккаунтом",
+            admin_type="Уже был аккаунт",
+            user_reply=ID_SUBMITTED_TEXT,
+        )
+
+
+@router.callback_query(F.data == "existing:reconnect")
+async def handle_reconnect_request(callback: CallbackQuery) -> None:
+    """«Помогите переподключить»: экран 3e — инструкция и inline-кнопки."""
+    if not callback.from_user or not _step_is_existing_account_options(callback.from_user.id):
+        await callback.answer()
+        return
+    user_id = callback.from_user.id
+    state_manager.set_step(user_id, "reconnect_instruction")
+    text = RECONNECT_INSTRUCTION_TEXT.format(affiliate_link=config.AFFILIATE_LINK)
+    await callback.message.answer(
+        text, reply_markup=get_reconnect_instruction_keyboard(), parse_mode="Markdown"
     )
+    await callback.answer()
 
 
-@router.message(
-    F.text.casefold() == "назад",
-    lambda m: _step_is_existing_account_options(m.from_user.id) if m.from_user else False,
-)
-async def handle_back_from_existing_account(message: Message) -> None:
+@router.callback_query(F.data == "reconnect:enter_id")
+async def handle_reconnect_enter_id(callback: CallbackQuery) -> None:
+    """«Ввести ID»: переход в awaiting_existing_id, показ AWAIT_RECONNECT_ID_TEXT."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    state_manager.set_step(user_id, "awaiting_existing_id")
+    state_manager.set_reconnect_flow(user_id, True)
+    await callback.message.answer(
+        AWAIT_RECONNECT_ID_TEXT, parse_mode="Markdown", reply_markup=get_await_id_keyboard()
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "reconnect:back")
+async def handle_reconnect_back(callback: CallbackQuery) -> None:
+    """«Назад» из экрана 3e: возврат к existing_account_options."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    state_manager.set_step(user_id, "existing_account_options")
+    await callback.message.answer(
+        EXISTING_ACCOUNT_SCREEN_TEXT,
+        reply_markup=get_existing_account_keyboard(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "existing:back")
+async def handle_back_from_existing_account(callback: CallbackQuery) -> None:
     """«Назад» из existing_account_options: возврат к «У вас уже есть аккаунт?»."""
-    user_id = message.from_user.id if message.from_user else 0
+    if not callback.from_user or not _step_is_existing_account_options(callback.from_user.id):
+        await callback.answer()
+        return
+    user_id = callback.from_user.id
     state_manager.set_step(user_id, "choose_account_status")
-    await message.answer(
-        "У вас уже есть аккаунт в InTradeBar?",
+    await callback.message.answer(
+        GET_ACCESS_SCREEN_TEXT,
         reply_markup=get_account_status_keyboard(),
+        parse_mode="Markdown",
     )
+    await callback.answer()
 
 
 # --- Связаться с поддержкой ---
@@ -229,7 +325,7 @@ async def handle_support_message_input(message: Message) -> None:
     await message.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
     user_id = message.from_user.id if message.from_user else 0
     state_manager.set_step(user_id, "main")
-    await message.answer("Сообщение отправлено.", reply_markup=get_main_menu_keyboard())
+    await message.answer(SUPPORT_SENT_TEXT, reply_markup=get_main_menu_keyboard())
 
 
 # --- Fallback: текст в состояниях без ожидания ввода ---
@@ -237,7 +333,7 @@ async def handle_support_message_input(message: Message) -> None:
 
 @router.message(F.text)
 async def handle_text_fallback(message: Message) -> None:
-    """Любой необработанный текст: возврат в main с главным меню."""
+    """Любой необработанный текст: возврат в main с главным меню (Inline)."""
     user_id = message.from_user.id if message.from_user else 0
     state_manager.set_step(user_id, "main")
     await message.answer(START_TEXT, reply_markup=get_main_menu_keyboard())
