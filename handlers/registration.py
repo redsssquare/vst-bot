@@ -1,7 +1,7 @@
 """Обработчики регистрации — ветки «Нет, зарегистрироваться» и «Да, есть аккаунт»."""
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, User
 
 import config
 import state_manager
@@ -19,14 +19,11 @@ from keyboards import (
 router = Router(name="registration")
 
 
-def _format_user_info(message: Message) -> str:
-    """Форматирует Username и Telegram ID для уведомления админу."""
-    if not message.from_user:
-        return "Telegram ID: —"
-    user_id = message.from_user.id
-    username = message.from_user.username
-    user_display = f"@{username}" if username else "(нет)"
-    return f"Username: {user_display}\nTelegram ID: {user_id}"
+def _format_user_info(from_user: User | None) -> str:
+    """Форматирует username для уведомления админу."""
+    if not from_user:
+        return "Пользователь: Без username"
+    return f"Пользователь: @{from_user.username}" if from_user.username else "Пользователь: Без username"
 
 
 def _step_is_choose_account_status(user_id: int) -> bool:
@@ -52,13 +49,19 @@ def _step_is_awaiting_support_message(user_id: int) -> bool:
 async def _handle_id_submission(
     message: Message,
     broker_id: str,
-    admin_header: str,
-    admin_type: str,
+    header: str,
+    emoji: str,
+    action_text: str,
     user_reply: str,
 ) -> None:
     """Общая логика: уведомление админу, set_step(main), ответ пользователю."""
-    user_info = _format_user_info(message)
-    admin_text = f"{admin_header}\n{user_info}\nBroker ID: {broker_id}\nТип: {admin_type}"
+    user_info = _format_user_info(message.from_user)
+    admin_text = (
+        f"{emoji} {header}\n\n"
+        f"{user_info}\n"
+        f"Broker ID: {broker_id}\n\n"
+        f"Действие: {action_text}"
+    )
     await message.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
     user_id = message.from_user.id if message.from_user else 0
     state_manager.set_step(user_id, "main")
@@ -87,7 +90,7 @@ RECONNECT_INSTRUCTION_TEXT = (
     "После ответа поддержки вернитесь сюда и отправьте ваш ID аккаунта."
 )
 AWAIT_RECONNECT_ID_TEXT = (
-    "Отправьте ваш **ID аккаунта InTradeBar**.\n"
+    "Отправьте ваш **ID аккаунта Intrade Bar**.\n"
     "После проверки мы откроем доступ к сигнальной группе."
 )
 
@@ -159,8 +162,9 @@ async def handle_new_registration_id_input(message: Message) -> None:
     await _handle_id_submission(
         message,
         broker_id=raw,
-        admin_header="Новая регистрация",
-        admin_type="Новая регистрация",
+        header="Новая регистрация",
+        emoji="🆕",
+        action_text="Проверьте ID у брокера и отправьте пользователю доступ.",
         user_reply=ID_SUBMITTED_TEXT,
     )
 
@@ -241,16 +245,18 @@ async def handle_existing_id_input(message: Message) -> None:
         await _handle_id_submission(
             message,
             broker_id=raw,
-            admin_header="Пользователь с уже существующим аккаунтом",
-            admin_type="Переподключение",
+            header="Существующий аккаунт",
+            emoji="👤",
+            action_text="Проверьте, зарегистрирован ли аккаунт по нашей партнёрской ссылке. Если да — отправьте доступ.",
             user_reply=ID_SUBMITTED_TEXT,
         )
     else:
         await _handle_id_submission(
             message,
             broker_id=raw,
-            admin_header="Пользователь с уже существующим аккаунтом",
-            admin_type="Уже был аккаунт",
+            header="Существующий аккаунт",
+            emoji="👤",
+            action_text="Проверьте, зарегистрирован ли аккаунт по нашей партнёрской ссылке. Если да — отправьте доступ.",
             user_reply=ID_SUBMITTED_TEXT,
         )
 
@@ -267,6 +273,13 @@ async def handle_reconnect_request(callback: CallbackQuery) -> None:
     await callback.message.answer(
         text, reply_markup=get_reconnect_instruction_keyboard(), parse_mode="Markdown"
     )
+    user_info = _format_user_info(callback.from_user)
+    admin_text = (
+        "🔁 Запрос на переподключение\n\n"
+        f"{user_info}\n\n"
+        "Действие: Ожидаем, пока пользователь напишет в поддержку брокера и вернётся с новым Broker ID."
+    )
+    await callback.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
     await callback.answer()
 
 
@@ -319,9 +332,14 @@ async def handle_back_from_existing_account(callback: CallbackQuery) -> None:
 )
 async def handle_support_message_input(message: Message) -> None:
     """Обработка текста при state == awaiting_support_message: уведомление админу, ответ, main."""
-    user_info = _format_user_info(message)
+    user_info = _format_user_info(message.from_user)
     text = (message.text or "").strip() or "(пусто)"
-    admin_text = f"Сообщение в поддержку\n{user_info}\nТекст: {text}"
+    admin_text = (
+        "💬 Сообщение от пользователя\n\n"
+        f"{user_info}\n\n"
+        f"Текст сообщения:\n{text}\n\n"
+        "Действие: Ответьте пользователю через Telegram."
+    )
     await message.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
     user_id = message.from_user.id if message.from_user else 0
     state_manager.set_step(user_id, "main")

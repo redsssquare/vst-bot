@@ -21,9 +21,11 @@ telegram-bot/
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `ADMIN_GROUP_CHAT_ID` | int | Admin group chat ID |
+| `ADMIN_GROUP_CHAT_ID` | int | Admin group chat ID (alias: `ADMIN_CHAT_ID`) |
 | `SIGNAL_GROUP_LINK` | str | Link to signal group (for approved users) |
 | `AFFILIATE_LINK` | str | Affiliate registration link |
+
+**Admin notifications:** Messages sent to admin chat use format: emoji + header, user_info (Пользователь: @username or Без username), Broker ID (if applicable), action_text. Types: 🆕 Новая регистрация, 👤 Существующий аккаунт, 🔁 Запрос на переподключение, 💬 Сообщение от пользователя.
 
 ## Run
 

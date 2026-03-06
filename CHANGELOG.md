@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Stage 1: Admin chat messages refactor
+
+- **handlers/registration.py**: `_format_user_info` — returns "Пользователь: @username" or "Пользователь: Без username" (no Telegram ID).
+- `_handle_id_submission` — new format: emoji + header, user_info, Broker ID, action_text.
+- 4 admin message types: 🆕 Новая регистрация, 👤 Существующий аккаунт, 🔁 Запрос на переподключение, 💬 Сообщение от пользователя.
+- `handle_reconnect_request` — sends admin notification when user clicks "Помогите переподключить".
+
 ### UX text polishing
 
 - **START_TEXT**: emojis 📍 📊 🔄, improved formatting.
