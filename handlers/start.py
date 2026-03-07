@@ -4,8 +4,10 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
+import config
 import state_manager
 from keyboards import get_account_status_keyboard, get_main_menu_keyboard
+from services import baserow
 
 router = Router(name="start")
 
@@ -32,6 +34,18 @@ async def cmd_start(message: Message) -> None:
     user_id = message.from_user.id if message.from_user else 0
     state_manager.set_step(user_id, "main")
 
+    user = await baserow.get_user_by_telegram_id(user_id)
+    if user is None:
+        username = (message.from_user.username if message.from_user else None) or ""
+        first_name = (message.from_user.first_name if message.from_user else None) or ""
+        await baserow.create_user(
+            telegram_id=user_id,
+            telegram_username=username,
+            first_name=first_name,
+            status=config.STATUS_NEW,
+            last_event="start",
+        )
+
     await message.answer(
         START_TEXT,
         reply_markup=get_main_menu_keyboard(),
@@ -43,6 +57,10 @@ async def handle_get_access(callback: CallbackQuery) -> None:
     """Обработка нажатия кнопки «Получить доступ»."""
     user_id = callback.from_user.id if callback.from_user else 0
     state_manager.set_step(user_id, "choose_account_status")
+
+    row = await baserow.get_user_by_telegram_id(user_id)
+    if row is not None:
+        await baserow.update_status(row["id"], config.STATUS_REGISTRATION_STARTED, "registration_started")
 
     await callback.message.answer(
         GET_ACCESS_SCREEN_TEXT,

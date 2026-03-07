@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Baserow CRM integration
+
+- **config/crm.py**: `BASEROW_URL`, `BASEROW_TOKEN`, `BASEROW_TABLE_ID` from env (fallback empty).
+- **services/baserow.py**: `get_user_by_telegram_id`, `create_user`, `update_status`, `update_broker_id`, `log_event`. No-op when CRM not configured.
+- **handlers/start.py**: `cmd_start` — create user if new; `handle_get_access` — update status to "Начал регистрацию", event `registration_started`.
+- **handlers/registration.py**: `_handle_id_submission` — update `broker_id`, status "Broker ID получен", event `broker_id_submitted`; `handle_support_message_input` — status "Сообщение в поддержку", event `support_message`.
+- **Structural:** `config/` package (crm.py), `services/` package (baserow.py); `config.py` removed.
+
 ### Stage 1: Admin chat messages refactor
 
 - **handlers/registration.py**: `_format_user_info` — returns "Пользователь: @username" or "Пользователь: Без username" (no Telegram ID).

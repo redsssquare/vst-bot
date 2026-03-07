@@ -1,5 +1,13 @@
 """Точка входа: aiohttp-приложение с webhook для aiogram 3.x."""
 
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Явный путь к .env (важно для systemd, где cwd может отличаться)
+_env_path = Path(__file__).resolve().parent / ".env"
+load_dotenv(_env_path)
+
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher

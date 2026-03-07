@@ -6,6 +6,7 @@ from aiogram.types import CallbackQuery, Message, User
 import config
 import state_manager
 from handlers.start import GET_ACCESS_SCREEN_TEXT, START_TEXT
+from services import baserow
 from keyboards import (
     get_account_status_keyboard,
     get_await_id_keyboard,
@@ -64,6 +65,9 @@ async def _handle_id_submission(
     )
     await message.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
     user_id = message.from_user.id if message.from_user else 0
+    user = await baserow.get_user_by_telegram_id(user_id)
+    if user is not None:
+        await baserow.update_broker_id(user["id"], broker_id)
     state_manager.set_step(user_id, "main")
     await message.answer(user_reply, reply_markup=get_post_id_success_keyboard())
 
@@ -101,8 +105,12 @@ async def handle_no_register(callback: CallbackQuery) -> None:
     if not callback.from_user or not _step_is_choose_account_status(callback.from_user.id):
         await callback.answer()
         return
+    user_id = callback.from_user.id
     text = NO_REGISTER_SCREEN_TEXT.format(affiliate_link=config.AFFILIATE_LINK)
     await callback.message.answer(text, reply_markup=get_new_registration_keyboard())
+    user = await baserow.get_user_by_telegram_id(user_id)
+    if user is not None:
+        await baserow.update_status(user["id"], config.STATUS_WAITING_BROKER_ID, "awaiting_broker_id")
     await callback.answer()
 
 
@@ -273,6 +281,9 @@ async def handle_reconnect_request(callback: CallbackQuery) -> None:
     await callback.message.answer(
         text, reply_markup=get_reconnect_instruction_keyboard(), parse_mode="Markdown"
     )
+    user = await baserow.get_user_by_telegram_id(user_id)
+    if user is not None:
+        await baserow.update_status(user["id"], config.STATUS_WAITING_BROKER_ID, "awaiting_broker_id")
     user_info = _format_user_info(callback.from_user)
     admin_text = (
         "🔁 Запрос на переподключение\n\n"
@@ -342,6 +353,9 @@ async def handle_support_message_input(message: Message) -> None:
     )
     await message.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
     user_id = message.from_user.id if message.from_user else 0
+    user = await baserow.get_user_by_telegram_id(user_id)
+    if user is not None:
+        await baserow.update_status(user["id"], config.STATUS_SUPPORT_MESSAGE, "support_message")
     state_manager.set_step(user_id, "main")
     await message.answer(SUPPORT_SENT_TEXT, reply_markup=get_main_menu_keyboard())
 

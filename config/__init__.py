@@ -8,3 +8,13 @@ ADMIN_GROUP_CHAT_ID: int = -5253061936  # TODO: set actual admin group chat ID
 ADMIN_CHAT_ID = ADMIN_GROUP_CHAT_ID  # alias for spec compliance
 SIGNAL_GROUP_LINK: str = "https://t.me/trade_riski"  # TODO: set link to signal group for approve
 AFFILIATE_LINK: str = "https://intrade27.bar/854761"
+
+# CRM статусы (строго использовать эти строки)
+STATUS_NEW = "Новый пользователь"
+STATUS_REGISTRATION_STARTED = "Начал регистрацию"
+STATUS_WAITING_BROKER_ID = "Ожидаем Broker ID"
+STATUS_BROKER_ID_RECEIVED = "Broker ID получен"
+STATUS_ACCESS_GRANTED = "Доступ выдан"
+STATUS_SUPPORT_MESSAGE = "Сообщение в поддержку"
+STATUS_REJECTED = "Отклонен"
+STATUS_SPAM = "Спам"
