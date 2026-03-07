@@ -1,0 +1,136 @@
+"""CRM Service — обёртки над Baserow для работы с пользователями."""
+
+import asyncio
+import logging
+
+import config
+from services import baserow
+
+logger = logging.getLogger(__name__)
+
+
+async def get_new_users(limit: int = 200, offset: int = 0):
+    """Пользователи со статусом «Новый пользователь»."""
+    return await baserow.get_users_by_status(config.STATUS_NEW, limit=limit, offset=offset)
+
+
+async def get_waiting_broker_id(limit: int = 200, offset: int = 0):
+    """Пользователи со статусом «Ожидаем Broker ID»."""
+    return await baserow.get_users_by_status(config.STATUS_WAITING_BROKER_ID, limit=limit, offset=offset)
+
+
+async def get_support_requests(limit: int = 200, offset: int = 0):
+    """Пользователи со статусом «Сообщение в поддержку»."""
+    return await baserow.get_users_by_status(config.STATUS_SUPPORT_MESSAGE, limit=limit, offset=offset)
+
+
+async def get_ready_to_connect(limit: int = 200, offset: int = 0):
+    """Пользователи со статусом «Broker ID получен» (Готовы к подключению)."""
+    return await baserow.get_users_by_status(config.STATUS_BROKER_ID_RECEIVED, limit=limit, offset=offset)
+
+
+async def get_new_leads_24h(limit: int = 10, offset: int = 0):
+    """Пользователи, созданные за последние 24 часа."""
+    return await baserow.get_users_created_after_24h(limit=limit, offset=offset)
+
+
+async def get_new_leads_count() -> int:
+    """Количество пользователей, созданных за последние 24 часа."""
+    return await baserow.get_new_leads_count()
+
+
+async def get_recent_users(limit: int = 20, offset: int = 0):
+    """Последние пользователи по дате создания."""
+    return await baserow.get_recent_users(limit, offset)
+
+
+async def get_waiting_count() -> int:
+    """Количество пользователей «Ожидаем Broker ID»."""
+    users = await baserow.get_users_by_status(config.STATUS_WAITING_BROKER_ID)
+    return len(users)
+
+
+async def get_ready_count() -> int:
+    """Количество пользователей «Broker ID получен» (Готовы к подключению)."""
+    users = await baserow.get_users_by_status(config.STATUS_BROKER_ID_RECEIVED)
+    return len(users)
+
+
+async def get_new_count() -> int:
+    """Количество пользователей «Новый пользователь»."""
+    users = await baserow.get_users_by_status(config.STATUS_NEW)
+    return len(users)
+
+
+async def get_support_count() -> int:
+    """Количество пользователей «Сообщение в поддержку»."""
+    users = await baserow.get_users_by_status(config.STATUS_SUPPORT_MESSAGE)
+    return len(users)
+
+
+async def get_all_users_count() -> int:
+    """Общее количество пользователей в таблице."""
+    return await baserow.get_total_rows_count()
+
+
+async def get_menu_counts() -> dict[str, int]:
+    """Counters для CRM меню: ready, waiting, new_leads, support, all."""
+    ready, waiting, new_leads, support, all_count = await asyncio.gather(
+        get_ready_count(),
+        get_waiting_count(),
+        get_new_leads_count(),
+        get_support_count(),
+        get_all_users_count(),
+    )
+    return {"ready": ready, "waiting": waiting, "new_leads": new_leads, "support": support, "all": all_count}
+
+
+async def get_user_card(telegram_id: int) -> dict | None:
+    """
+    Получить карточку пользователя по telegram_id.
+    Возвращает dict с id, telegram_id, telegram_username, first_name, broker_id, status, created_at.
+    None если пользователь не найден.
+    """
+    row = await baserow.get_user_by_telegram_id(telegram_id)
+    if row is None:
+        return None
+    return baserow.row_to_user_dict(row)
+
+
+async def set_access_granted(telegram_id: int) -> bool:
+    """Выдать доступ пользователю. True при успехе, False если пользователь не найден или обновление не удалось."""
+    row = await baserow.get_user_by_telegram_id(telegram_id)
+    if row is None:
+        return False
+    ok = await baserow.update_status(row["id"], config.STATUS_ACCESS_GRANTED)
+    if not ok:
+        return False
+    await baserow.log_event(row["id"], "access_granted")
+    logger.info("CRM: access_granted telegram_id=%s row_id=%s", telegram_id, row["id"])
+    return True
+
+
+async def set_rejected(telegram_id: int) -> bool:
+    """Отклонить пользователя. True при успехе, False если пользователь не найден или обновление не удалось."""
+    row = await baserow.get_user_by_telegram_id(telegram_id)
+    if row is None:
+        return False
+    ok = await baserow.update_status(row["id"], config.STATUS_REJECTED)
+    if not ok:
+        return False
+    await baserow.log_event(row["id"], "rejected")
+    logger.info("CRM: rejected telegram_id=%s row_id=%s", telegram_id, row["id"])
+    return True
+
+
+async def set_spam(telegram_id: int) -> bool:
+    """Пометить пользователя как спам. True при успехе, False если пользователь не найден или обновление не удалось."""
+    row = await baserow.get_user_by_telegram_id(telegram_id)
+    if row is None:
+        return False
+    ok = await baserow.update_status(row["id"], config.STATUS_SPAM)
+    if not ok:
+        return False
+    await baserow.log_event(row["id"], "spam_marked")
+    logger.info("CRM: spam_marked telegram_id=%s row_id=%s", telegram_id, row["id"])
+    return True

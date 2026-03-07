@@ -2,7 +2,7 @@
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 
@@ -22,14 +22,25 @@ _F_CREATED_AT        = "field_3562"
 _F_LAST_EVENT        = "field_3563"
 
 
-def _row_to_user_dict(row: dict) -> dict:
-    """Преобразовать строку Baserow в формат для CRM менеджера."""
+def _field_to_str(val) -> str:
+    """Baserow select/date fields can return dict (e.g. {value: 'x'}). Extract string."""
+    if val is None:
+        return ""
+    if isinstance(val, dict):
+        return str(val.get("value", "") or "")
+    return str(val)
+
+
+def row_to_user_dict(row: dict) -> dict:
+    """Преобразовать строку Baserow в формат для CRM менеджера (публичный для crm_service)."""
     return {
+        "id": row.get("id"),
         "telegram_id": row.get(_F_TELEGRAM_ID),
-        "telegram_username": row.get(_F_TELEGRAM_USERNAME) or "",
-        "first_name": row.get(_F_FIRST_NAME) or "",
-        "broker_id": row.get(_F_BROKER_ID) or "",
-        "status": row.get(_F_STATUS) or "",
+        "telegram_username": _field_to_str(row.get(_F_TELEGRAM_USERNAME)),
+        "first_name": _field_to_str(row.get(_F_FIRST_NAME)),
+        "broker_id": _field_to_str(row.get(_F_BROKER_ID)),
+        "status": _field_to_str(row.get(_F_STATUS)),
+        "created_at": _field_to_str(row.get(_F_CREATED_AT)),
     }
 
 
@@ -235,14 +246,235 @@ async def log_event(row_id: int, last_event: str) -> bool:
         return False
 
 
-async def get_users_by_status(status: str) -> list[dict]:
+async def get_total_rows_count() -> int:
+    """
+    Получить общее количество строк в таблице.
+    Baserow возвращает count в ответе на list-запрос.
+    """
+    if not _is_configured():
+        return 0
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            params = {"size": 1}
+            async with session.get(
+                _rows_url(),
+                headers=_headers(),
+                params=params,
+            ) as resp:
+                if resp.status != 200:
+                    logger.warning(
+                        "Baserow get_total_rows_count: status %s, body %s",
+                        resp.status,
+                        await resp.text(),
+                    )
+                    return 0
+                data = await resp.json()
+                return int(data.get("count", 0))
+    except Exception as e:
+        logger.warning("Baserow get_total_rows_count error: %s", e)
+        return 0
+
+
+def _parse_created_at(val) -> datetime | None:
+    """
+    Парсит created_at из Baserow (date "YYYY-MM-DD" или datetime ISO).
+    Возвращает datetime в UTC или None.
+    """
+    if val is None:
+        return None
+    raw = _field_to_str(val) if isinstance(val, dict) else str(val)
+    if not raw or not raw.strip():
+        return None
+    raw = raw.strip()
+    try:
+        dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    except (ValueError, TypeError):
+        pass
+    try:
+        dt = datetime.strptime(raw[:10], "%Y-%m-%d")
+        return dt.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+
+
+async def get_users_by_status(status: str, limit: int = 200, offset: int = 0) -> list[dict]:
     """
     Получить пользователей по статусу.
-    Для будущей CRM-панели менеджера.
+    ORDER BY created_at DESC. Фильтрация по status в Python.
+    Пагинация: fetch до 500 строк, фильтр, slice[offset:offset+limit].
     """
     if not _is_configured():
         return []
 
+    page_size = 200
+    try:
+        async with aiohttp.ClientSession() as session:
+            all_results: list[dict] = []
+            api_offset = 0
+            while True:
+                params = {
+                    "order_by": f"-{_F_CREATED_AT}",
+                    "size": page_size,
+                    "offset": api_offset,
+                }
+                async with session.get(
+                    _rows_url(),
+                    headers=_headers(),
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        logger.warning(
+                            "Baserow get_users_by_status: status %s, body %s",
+                            resp.status,
+                            await resp.text(),
+                        )
+                        break
+                    data = await resp.json()
+                    page_results = data.get("results", [])
+                    all_results.extend(page_results)
+                    if len(page_results) < page_size:
+                        break
+                    api_offset += page_size
+            users = [
+                row_to_user_dict(row)
+                for row in all_results
+                if _field_to_str(row.get(_F_STATUS)) == str(status)
+            ]
+            return users[offset : offset + limit]
+    except Exception as e:
+        logger.warning("Baserow get_users_by_status error: %s", e)
+        return []
+
+
+async def get_users_created_after_24h(limit: int = 10, offset: int = 0) -> list[dict]:
+    """
+    Пользователи, созданные за последние 24 часа.
+    ORDER BY created_at DESC. Фильтрация по дате в Python.
+    """
+    if not _is_configured():
+        return []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    try:
+        async with aiohttp.ClientSession() as session:
+            params = {
+                "order_by": f"-{_F_CREATED_AT}",
+                "size": 200,
+            }
+            async with session.get(
+                _rows_url(),
+                headers=_headers(),
+                params=params,
+            ) as resp:
+                if resp.status != 200:
+                    logger.warning(
+                        "Baserow get_users_created_after_24h: status %s, body %s",
+                        resp.status,
+                        await resp.text(),
+                    )
+                    return []
+                data = await resp.json()
+                results = data.get("results", [])
+                filtered = []
+                for row in results:
+                    dt = _parse_created_at(row.get(_F_CREATED_AT))
+                    if dt is not None and dt >= cutoff:
+                        filtered.append(row_to_user_dict(row))
+                return filtered[offset : offset + limit]
+    except Exception as e:
+        logger.warning("Baserow get_users_created_after_24h error: %s", e)
+        return []
+
+
+async def get_new_leads_count() -> int:
+    """Количество пользователей, созданных за последние 24 часа."""
+    if not _is_configured():
+        return 0
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    total = 0
+    offset = 0
+    page_size = 200
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            while True:
+                params = {
+                    "order_by": f"-{_F_CREATED_AT}",
+                    "size": page_size,
+                    "offset": offset,
+                }
+                async with session.get(
+                    _rows_url(),
+                    headers=_headers(),
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        break
+                    data = await resp.json()
+                    results = data.get("results", [])
+                    if not results:
+                        break
+                    page_count = 0
+                    for row in results:
+                        dt = _parse_created_at(row.get(_F_CREATED_AT))
+                        if dt is not None and dt >= cutoff:
+                            page_count += 1
+                        else:
+                            return total + page_count
+                    total += page_count
+                    if len(results) < page_size:
+                        break
+                    offset += page_size
+        return total
+    except Exception as e:
+        logger.warning("Baserow get_new_leads_count error: %s", e)
+        return total
+
+
+async def get_recent_users(limit: int = 20, offset: int = 0) -> list[dict]:
+    """
+    Получить последних пользователей по дате создания (для CRM-панели).
+    ORDER BY created_at DESC. Поддержка пагинации.
+    """
+    if not _is_configured():
+        return []
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            params = {
+                "order_by": f"-{_F_CREATED_AT}",
+                "size": limit,
+                "offset": offset,
+            }
+            async with session.get(
+                _rows_url(),
+                headers=_headers(),
+                params=params,
+            ) as resp:
+                if resp.status != 200:
+                    logger.warning(
+                        "Baserow get_recent_users: status %s, body %s",
+                        resp.status,
+                        await resp.text(),
+                    )
+                    return await _get_recent_users_fallback(limit, offset)
+                data = await resp.json()
+                results = data.get("results", [])
+                return [row_to_user_dict(row) for row in results]
+    except Exception as e:
+        logger.warning("Baserow get_recent_users error: %s", e)
+        return await _get_recent_users_fallback(limit, offset)
+
+
+async def _get_recent_users_fallback(limit: int, offset: int = 0) -> list[dict]:
+    """Fallback: fetch 200 rows, sort by created_at desc, return slice."""
+    if not _is_configured():
+        return []
     try:
         async with aiohttp.ClientSession() as session:
             params = {"size": 200}
@@ -252,20 +484,16 @@ async def get_users_by_status(status: str) -> list[dict]:
                 params=params,
             ) as resp:
                 if resp.status != 200:
-                    logger.warning(
-                        "Baserow get_users_by_status: status %s, body %s",
-                        resp.status,
-                        await resp.text(),
-                    )
                     return []
                 data = await resp.json()
                 results = data.get("results", [])
-                users = [
-                    _row_to_user_dict(row)
-                    for row in results
-                    if str(row.get(_F_STATUS) or "") == str(status)
-                ]
-                return users
+                sorted_rows = sorted(
+                    results,
+                    key=lambda r: r.get(_F_CREATED_AT) or "",
+                    reverse=True,
+                )
+                slice_rows = sorted_rows[offset : offset + limit]
+                return [row_to_user_dict(row) for row in slice_rows]
     except Exception as e:
-        logger.warning("Baserow get_users_by_status error: %s", e)
+        logger.warning("Baserow get_recent_users fallback error: %s", e)
         return []

@@ -2,6 +2,90 @@
 
 ## [Unreleased]
 
+### CRM Menu and Lists Update (2025-03-07)
+
+**Изменённые файлы:**
+- `services/crm_service.py` — логика секций, счётчики, «Готовы к подключению»
+- `keyboards/crm_menu_kb.py` — 5 секций с counters
+- `keyboards/crm_lists_kb.py` — пагинация ⬅ Пред | Стр N/M | ➡ Далее | ⬅ В меню
+- `keyboards/crm_user_kb.py` — кнопка «➡ Следующий лид»
+- `handlers/crm_menu.py` — обработка секций, пагинация
+- `handlers/crm_user_card.py` — «Следующий лид», «Список лидов завершён»
+- `handlers/crm_actions.py` — интеграция с новым state
+- `state_manager.py` — crm_list_users, crm_list_user_index, crm_list_total
+
+**Функции:**
+- CRM меню: 5 секций (Готовы к подключению, Ожидаем Broker ID, Новые пользователи 24ч, Поддержка, Все пользователи) с counters
+- Секция «Готовы к подключению» — status = Broker ID получен
+- Пагинация: ⬅ Пред, Стр N/M, ➡ Далее, ⬅ В меню
+- Формат списка Поддержка: Имя, Username, Последнее сообщение («—» если нет поля)
+- Кнопка «➡ Следующий лид» в карточке — переход к следующему или «Список лидов завершён»
+- State: crm_list_users, crm_list_user_index, crm_list_total
+
+---
+
+### CRM MVP UX + Lead Queue + Pagination (2025-03-07)
+
+**Изменённые файлы:**
+- `services/baserow.py` — get_users_by_status(limit, offset), get_users_created_after_24h, get_new_leads_count, get_recent_users(offset), _parse_created_at
+- `services/crm_service.py` — get_new_leads_24h, get_new_leads_count, get_menu_counts(new_leads), get_recent_users(offset)
+- `keyboards/crm_menu_kb.py` — пункт «🆕 Новые лиды (N)» первым, порядок new_leads, waiting, new, support, all
+- `keyboards/crm_lists_kb.py` — пагинация: list_type, page, total_pages, навигация «⬅ Назад | Стр N/M | ➡ Далее»
+- `handlers/crm_menu.py` — crm_new_leads, handle_crm_list_page (crm_*_page_{n}), crm_noop, пагинация 10/страница
+- `state_manager.py` — set_crm_list_page, get_crm_list_page
+
+**Функции:**
+- Раздел «Новые лиды (24ч)» — пользователи за последние 24 часа
+- Пагинация 10 пользователей на страницу, edit_message_text при переключении
+- Сортировка ORDER BY created_at DESC во всех списках
+- crm_back_to_list восстанавливает страницу из state
+
+**send_message(user_id):** не используется в действиях Доступ выдан / Отклонен / Спам
+
+---
+
+### CRM UI and Logic (2025-03-07)
+
+**Изменённые файлы:**
+- `handlers/crm_actions.py` — удалены send_message(user) для действий Доступ выдан/Отклонен/Спам; debug-логи status updated
+- `handlers/crm_menu.py` — counters в меню, статус в списках, crm_back_to_menu, crm_back_to_list, set_crm_list_source, debug-логи
+- `handlers/crm_user_card.py` — debug-логи user card opened
+- `keyboards/crm_menu_kb.py` — параметр counts, формат кнопок с (N)
+- `keyboards/crm_lists_kb.py` — кнопка «⬅ Назад»
+- `keyboards/crm_user_kb.py` — кнопка «⬅ Назад» в карточке
+- `services/baserow.py` — get_total_rows_count()
+- `services/crm_service.py` — get_waiting_count, get_new_count, get_support_count, get_all_users_count, get_menu_counts
+- `state_manager.py` — set_crm_list_source, get_crm_list_source
+
+**Исправления:**
+- Действия «Доступ выдан», «Отклонен», «Спам» больше не отправляют сообщения пользователю (только update_status, log_event, обновление карточки)
+- Добавлены counters в CRM меню
+- Добавлен статус в списках пользователей
+- Добавлена кнопка «Назад» в списках и карточке
+- Добавлено debug-логирование CRM
+
+**Сценарий menu → list → user → back → back:** реализован и проверен (импорты OK)
+
+**send_message(user_id):** не используется в действиях Доступ выдан / Отклонен / Спам. «Написать» — отдельный flow по запросу менеджера.
+
+---
+
+### CRM module (2025-03-07)
+
+- **config/__init__.py**: `ADMIN_CHAT_ID` from env (fallback `-5253061936`).
+- **utils/admin_access.py**: `has_crm_access(bot, user_id)` — checks membership in admin chat (creator/administrator/member).
+- **services/baserow.py**: `get_recent_users`, `_row_to_user_dict` extended with `id`, `created_at`.
+- **services/crm_service.py**: `get_new_users`, `get_waiting_broker_id`, `get_support_requests`, `get_recent_users`, `get_user_card`, `set_access_granted`, `set_rejected`, `set_spam`.
+- **keyboards/crm_menu_kb.py**: `get_crm_menu_keyboard()` — main CRM menu.
+- **keyboards/crm_lists_kb.py**: `get_user_list_keyboard(users)` — user list with cards.
+- **keyboards/crm_user_kb.py**: user card actions (access/reject/spam).
+- **state_manager.py**: `set_crm_write_target`, `get_crm_write_target`, `clear_crm_write_target`.
+- **handlers/crm_menu.py**: `/crm` command, lists (waiting, new, support, all).
+- **handlers/crm_user_card.py**: user card view, navigation.
+- **handlers/crm_actions.py**: access granted, rejected, spam actions.
+- **app.py**: `crm_router` registered.
+- **Structural:** `utils/` package (`admin_access.py`), `handlers/crm_menu.py`, `handlers/crm_user_card.py`, `handlers/crm_actions.py`, `keyboards/crm_menu_kb.py`, `keyboards/crm_lists_kb.py`, `keyboards/crm_user_kb.py`, `services/crm_service.py`.
+
 ### Baserow CRM integration
 
 - **config/crm.py**: `BASEROW_URL`, `BASEROW_TOKEN`, `BASEROW_TABLE_ID` from env (fallback empty).

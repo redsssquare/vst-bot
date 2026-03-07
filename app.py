@@ -14,11 +14,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import Update
 
 import config
-from handlers import registration_router, start_router
+from handlers import crm_router, registration_router, start_router
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
 dp.include_router(start_router)
+dp.include_router(crm_router)
 dp.include_router(registration_router)
 
 

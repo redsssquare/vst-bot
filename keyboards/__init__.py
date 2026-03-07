@@ -1,5 +1,8 @@
 """Клавиатуры бота."""
 
+from .crm_lists_kb import get_user_list_keyboard
+from .crm_menu_kb import get_crm_menu_keyboard
+from .crm_user_kb import get_user_card_keyboard
 from .inline_admin import get_approve_reject_keyboard
 from .main_menu import (
     BTN_BACK,
@@ -21,6 +24,9 @@ from .main_menu import (
 )
 
 __all__ = (
+    "get_crm_menu_keyboard",
+    "get_user_card_keyboard",
+    "get_user_list_keyboard",
     "BTN_BACK",
     "BTN_ENTER_ID",
     "BTN_ENTER_ID_RECONNECT",
