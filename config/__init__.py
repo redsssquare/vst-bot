@@ -18,7 +18,7 @@ def _parse_admin_chat_id() -> int:
 
 ADMIN_CHAT_ID: int = _parse_admin_chat_id()
 SIGNAL_GROUP_LINK: str = "https://t.me/trade_riski"  # TODO: set link to signal group for approve
-AFFILIATE_LINK: str = "https://intrade27.bar/854761"
+AFFILIATE_LINK: str = os.environ.get("AFFILIATE_LINK", "https://intrade30.bar/854761")
 
 # CRM статусы (строго использовать эти строки)
 STATUS_NEW = "Новый пользователь"

@@ -107,7 +107,7 @@ async def handle_no_register(callback: CallbackQuery) -> None:
         return
     user_id = callback.from_user.id
     text = NO_REGISTER_SCREEN_TEXT.format(affiliate_link=config.AFFILIATE_LINK)
-    await callback.message.answer(text, reply_markup=get_new_registration_keyboard())
+    await callback.message.answer(text, reply_markup=get_new_registration_keyboard(config.AFFILIATE_LINK))
     user = await baserow.get_user_by_telegram_id(user_id)
     if user is not None:
         await baserow.update_status(user["id"], config.STATUS_WAITING_BROKER_ID, "awaiting_broker_id")
@@ -219,14 +219,14 @@ async def handle_await_id_back(callback: CallbackQuery) -> None:
     if step == "awaiting_new_registration_id":
         state_manager.set_step(user_id, "choose_account_status")
         text = NO_REGISTER_SCREEN_TEXT.format(affiliate_link=config.AFFILIATE_LINK)
-        await callback.message.answer(text, reply_markup=get_new_registration_keyboard())
+        await callback.message.answer(text, reply_markup=get_new_registration_keyboard(config.AFFILIATE_LINK))
     elif step == "awaiting_existing_id":
         if state_manager.get_reconnect_flow(user_id):
             state_manager.set_reconnect_flow(user_id, False)
             state_manager.set_step(user_id, "reconnect_instruction")
             text = RECONNECT_INSTRUCTION_TEXT.format(affiliate_link=config.AFFILIATE_LINK)
             await callback.message.answer(
-                text, reply_markup=get_reconnect_instruction_keyboard(), parse_mode="Markdown"
+                text, reply_markup=get_reconnect_instruction_keyboard(config.AFFILIATE_LINK), parse_mode="Markdown"
             )
         else:
             state_manager.set_step(user_id, "existing_account_options")
@@ -279,7 +279,7 @@ async def handle_reconnect_request(callback: CallbackQuery) -> None:
     state_manager.set_step(user_id, "reconnect_instruction")
     text = RECONNECT_INSTRUCTION_TEXT.format(affiliate_link=config.AFFILIATE_LINK)
     await callback.message.answer(
-        text, reply_markup=get_reconnect_instruction_keyboard(), parse_mode="Markdown"
+        text, reply_markup=get_reconnect_instruction_keyboard(config.AFFILIATE_LINK), parse_mode="Markdown"
     )
     user = await baserow.get_user_by_telegram_id(user_id)
     if user is not None:

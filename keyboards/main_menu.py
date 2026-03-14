@@ -12,6 +12,7 @@ BTN_I_REGISTERED = "✅ Я зарегистрировался"
 BTN_ENTER_ID = "✅ Да — ввести ID"
 BTN_ENTER_ID_RECONNECT = "⌨️ Ввести ID"
 BTN_RECONNECT = "⚙️ Нет — переподключить"
+BTN_OPEN_LINK = "🔗 Открыть ссылку"
 
 
 def get_main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -35,10 +36,11 @@ def get_account_status_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def get_new_registration_keyboard() -> InlineKeyboardMarkup:
+def get_new_registration_keyboard(affiliate_link: str) -> InlineKeyboardMarkup:
     """Клавиатура после регистрации."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text=BTN_OPEN_LINK, url=affiliate_link)],
             [InlineKeyboardButton(text=BTN_I_REGISTERED, callback_data="register:done")],
             [InlineKeyboardButton(text=BTN_BACK, callback_data="register:back")],
         ],
@@ -56,10 +58,11 @@ def get_existing_account_keyboard() -> InlineKeyboardMarkup:
     )
 
 
-def get_reconnect_instruction_keyboard() -> InlineKeyboardMarkup:
+def get_reconnect_instruction_keyboard(affiliate_link: str) -> InlineKeyboardMarkup:
     """Inline-клавиатура экрана 3e — инструкция по переподключению."""
     return InlineKeyboardMarkup(
         inline_keyboard=[
+            [InlineKeyboardButton(text=BTN_OPEN_LINK, url=affiliate_link)],
             [InlineKeyboardButton(text=BTN_ENTER_ID_RECONNECT, callback_data="reconnect:enter_id")],
             [InlineKeyboardButton(text=BTN_BACK, callback_data="reconnect:back")],
             [InlineKeyboardButton(text=BTN_SUPPORT, callback_data="main:support")],

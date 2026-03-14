@@ -1,0 +1,13 @@
+{"sessionId": "80cf00", "message": "CALLBACK_RAW", "data": {"data": "crm_all"}, "timestamp": 1772881508148, "hypothesisId": "H2"}
+{"sessionId": "80cf00", "message": "CALLBACK_RAW", "data": {"data": "crm_all"}, "timestamp": 1772881536742, "hypothesisId": "H2"}
+{"sessionId": "80cf00", "message": "CRM_LIST_ENTRY", "data": {"data": "crm_all", "handler": "crm_all"}, "timestamp": 1772881536752, "hypothesisId": "H2"}
+{"sessionId": "80cf00", "message": "CRM_LIST_BEFORE_ANSWER", "data": {"data": "crm_all", "users_count": 3}, "timestamp": 1772881537185, "hypothesisId": "H1"}
+{"sessionId": "80cf00", "message": "CALLBACK_RAW", "data": {"data": "crm_user_7750465635"}, "timestamp": 1772881544239, "hypothesisId": "H2"}
+{"sessionId": "80cf00", "message": "CRM_USER_CARD_ENTRY", "data": {"data": "crm_user_7750465635"}, "timestamp": 1772881544247, "hypothesisId": "H2"}
+{"sessionId": "80cf00", "message": "CRM_USER_CARD_LOADED", "data": {"telegram_id": 7750465635, "card_is_none": false}, "timestamp": 1772881544521, "hypothesisId": "H4"}
+{"sessionId": "80cf00", "message": "CRM_USER_CARD_BEFORE_ANSWER", "data": {"data": "crm_user_7750465635"}, "timestamp": 1772881544582, "hypothesisId": "H1"}
+{"sessionId": "80cf00", "message": "CALLBACK_RAW", "data": {"data": "crm_write_7750465635"}, "timestamp": 1772881554425, "hypothesisId": "H2"}
+{"sessionId": "80cf00", "message": "CALLBACK_RAW", "data": {"data": "crm_access_7750465635"}, "timestamp": 1772881588196, "hypothesisId": "H2"}
+{"sessionId": "80cf00", "message": "CRM_ACTION_ENTRY", "data": {"data": "crm_access_7750465635", "handler": "crm_access"}, "timestamp": 1772881588204, "hypothesisId": "H2"}
+{"sessionId": "80cf00", "message": "CRM_ACTION_BEFORE_ANSWER", "data": {"data": "crm_access_7750465635"}, "timestamp": 1772881589571, "hypothesisId": "H1"}
+{"sessionId": "80cf00", "message": "CALLBACK_RAW", "data": {"data": "crm_reject_7750465635"}, "timestamp": 1772881616950, "hypothesisId": "H2"}
