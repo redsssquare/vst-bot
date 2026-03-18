@@ -1,5 +1,6 @@
 ---
 name: code-reviewer
+model: claude-4.6-sonnet-medium
 description: Strict technical reviewer for TG BOT project. Validates Worker stage implementation. Use proactively after Worker completes a stage. Does not implement—only reviews and validates against MVP principles.
 ---
 

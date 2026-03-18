@@ -8,6 +8,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 import state_manager
 from utils.admin_access import has_crm_access
+from utils.format_helpers import format_datetime
 from services import crm_service
 from keyboards import get_user_card_keyboard
 
@@ -22,7 +23,7 @@ def _format_user_card(card: dict) -> str:
     telegram_id = card.get("telegram_id") or "—"
     broker_id = card.get("broker_id") or "—"
     status = card.get("status") or "—"
-    created_at = card.get("created_at") or "—"
+    created_at = format_datetime(card.get("created_at"))
 
     lines = [
         f"👤 {first_name}",
@@ -174,8 +175,14 @@ async def handle_crm_next_lead(callback: CallbackQuery) -> None:
         users = await crm_service.get_ready_to_connect(limit=10, offset=offset)
     elif list_type == "support":
         users = await crm_service.get_support_requests(limit=10, offset=offset)
+    elif list_type == "deposit":
+        users = await crm_service.get_waiting_deposit(limit=10, offset=offset)
+    elif list_type == "clients":
+        users = await crm_service.get_clients(limit=10, offset=offset)
+    elif list_type == "leads":
+        users = await crm_service.get_leads(limit=10, offset=offset)
     else:
-        users = await crm_service.get_recent_users(10, offset)
+        users = []
 
     state_manager.set_crm_list_page(user_id, next_page)
     state_manager.set_crm_list_users(user_id, users)

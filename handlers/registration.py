@@ -97,6 +97,11 @@ AWAIT_RECONNECT_ID_TEXT = (
     "Отправьте ваш **ID аккаунта Intrade Bar**.\n"
     "После проверки мы откроем доступ к сигнальной группе."
 )
+FALLBACK_TEXT = (
+    "Похоже, это сообщение не относится к текущему шагу\n\n"
+    "Выберите действие с помощью кнопок\n"
+    "или нажмите «Поддержка»."
+)
 
 
 @router.callback_query(F.data == "account:no")
@@ -365,7 +370,5 @@ async def handle_support_message_input(message: Message) -> None:
 
 @router.message(F.text)
 async def handle_text_fallback(message: Message) -> None:
-    """Любой необработанный текст: возврат в main с главным меню (Inline)."""
-    user_id = message.from_user.id if message.from_user else 0
-    state_manager.set_step(user_id, "main")
-    await message.answer(START_TEXT, reply_markup=get_main_menu_keyboard())
+    """Необработанный текст вне сценария: информировать пользователя и показать кнопки без сброса шага."""
+    await message.answer(FALLBACK_TEXT, reply_markup=get_main_menu_keyboard())

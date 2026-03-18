@@ -26,7 +26,8 @@ telegram-bot/
 │   ├── baserow.py      # Baserow API (get_user, create_user, get_recent_users, etc.)
 │   └── crm_service.py  # CRM business logic (get_new_users, get_user_card, set_access_granted, etc.)
 ├── utils/
-│   └── admin_access.py # has_crm_access — membership check in admin chat
+│   ├── admin_access.py  # has_crm_access — membership check in admin chat
+│   └── format_helpers.py# format_datetime() — datetime formatting helper
 └── state_manager.py
 ```
 
@@ -46,13 +47,25 @@ Admin panel for managing users. Access: only members of the chat with `ADMIN_CHA
 
 | Command | Description |
 |---------|-------------|
-| `/crm` | Open CRM menu (lists: Новые лиды 24ч, Ожидаем Broker ID, Новые пользователи, Поддержка, Все пользователи) |
+| `/crm` | Open CRM menu (7 sections with counters) |
 
-**Lists:** Each list shows count in menu. «Новые лиды (24ч)» — users created in last 24 hours (first in menu). All lists sorted by `created_at DESC`.
+**Sections (7):**
+
+| Button | Description |
+|--------|-------------|
+| Готовы к подключению | Status: Broker ID получен |
+| Ожидаем депозит | Status: Ожидаем депозит |
+| Ожидаем Broker ID | Status: waiting |
+| Новые лиды 24ч | Users created in last 24 hours |
+| Поддержка | Support requests |
+| Клиенты | Client users |
+| Лиды | Leads (filtered by exclude statuses) |
+
+**Lists:** Each section shows count in menu. All lists sorted by `created_at DESC`. List items display global position number and `created_at`.
 
 **Pagination:** 10 users per page. Navigation: «⬅ Назад» (to menu), «Стр N/M», «➡ Далее». Page state restored when returning from user card.
 
-**Actions:** View user card, grant access, reject, mark as spam.
+**Actions:** View user card, grant access, reject, mark as spam, request deposit (💰 Запросить депозит — sets status to `Ожидаем депозит`, notifies user).
 
 ## Baserow CRM
 

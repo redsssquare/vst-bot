@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+### CRM воронка — расширение (2026-03-18)
+
+**Новые файлы:**
+- `utils/format_helpers.py` — `format_datetime()` для форматирования дат
+- `utils/__init__.py` — экспорт `format_datetime`
+
+**Изменённые файлы:**
+- `config/__init__.py` — добавлена константа `STATUS_WAITING_DEPOSIT = "Ожидаем депозит"`
+- `services/baserow.py` — добавлены `_LEADS_EXCLUDE_STATUSES`, `get_leads_users()`, `get_leads_count()`
+- `services/crm_service.py` — добавлены `get_waiting_deposit`, `get_waiting_deposit_count`, `get_clients`, `get_clients_count`, `get_leads`, `get_leads_count`, `set_waiting_deposit`; `get_menu_counts()` возвращает 7 ключей (без `all`)
+- `keyboards/crm_menu_kb.py` — перестроено меню: 7 кнопок (ready, deposit, waiting, new_leads, support, clients, leads); удалена кнопка «Все пользователи»
+- `keyboards/crm_lists_kb.py` — `get_user_list_keyboard` принимает `page_offset`; кнопки показывают глобальный номер пользователя
+- `keyboards/crm_user_kb.py` — добавлена кнопка «💰 Запросить депозит»
+- `handlers/crm_menu.py` — удалён `handle_crm_all`; добавлены `handle_crm_deposit`, `handle_crm_clients`, `handle_crm_leads`; `_format_user_list` принимает `page_offset` и отображает `created_at`; обновлён regexp пагинации и ветки `back_to_list`
+- `handlers/crm_user_card.py` — в `handle_crm_next_lead` добавлены ветки для `deposit`, `clients`, `leads`; используется `format_datetime`
+- `handlers/crm_actions.py` — добавлены `handle_crm_deposit_request`, `handle_crm_deposit_confirm`, константа `DEPOSIT_MESSAGES`; используется `format_datetime`
+- `handlers/registration.py` — добавлена `FALLBACK_TEXT`; `handle_text_fallback` не сбрасывает шаг пользователя
+
+**Новые разделы CRM:**
+- «💰 Ожидаем депозит» — пользователи со статусом `STATUS_WAITING_DEPOSIT`
+- «👥 Клиенты» — пользователи-клиенты
+- «🔥 Лиды» — лиды, отфильтрованные по `_LEADS_EXCLUDE_STATUSES`
+
+**Новое действие:**
+- «💰 Запросить депозит» в карточке пользователя — устанавливает статус `STATUS_WAITING_DEPOSIT`, отправляет сообщение пользователю
+
+---
+
 ### CRM Menu and Lists Update (2025-03-07)
 
 **Изменённые файлы:**

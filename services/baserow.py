@@ -276,6 +276,52 @@ async def get_total_rows_count() -> int:
         return 0
 
 
+async def get_count_by_status(status: str) -> int:
+    """
+    Количество строк с заданным статусом.
+    Перебирает все страницы и считает совпадения в Python (Baserow не поддерживает
+    server-side фильтр по полю select без явного filter__fieldN синтаксиса).
+    """
+    if not _is_configured():
+        return 0
+
+    page_size = 200
+    page_num = 1
+    total = 0
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            while True:
+                params = {
+                    "size": page_size,
+                    "page": page_num,
+                }
+                async with session.get(
+                    _rows_url(),
+                    headers=_headers(),
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        logger.warning(
+                            "Baserow get_count_by_status: status %s, body %s",
+                            resp.status,
+                            await resp.text(),
+                        )
+                        break
+                    data = await resp.json()
+                    results = data.get("results", [])
+                    for row in results:
+                        if _field_to_str(row.get(_F_STATUS)) == str(status):
+                            total += 1
+                    if len(results) < page_size:
+                        break
+                    page_num += 1
+        return total
+    except Exception as e:
+        logger.warning("Baserow get_count_by_status error: %s", e)
+        return 0
+
+
 def _parse_created_at(val) -> datetime | None:
     """
     Парсит created_at из Baserow (date "YYYY-MM-DD" или datetime ISO).
@@ -305,7 +351,7 @@ async def get_users_by_status(status: str, limit: int = 200, offset: int = 0) ->
     """
     Получить пользователей по статусу.
     ORDER BY created_at DESC. Фильтрация по status в Python.
-    Пагинация: fetch до 500 строк, фильтр, slice[offset:offset+limit].
+    Пагинация: fetch все страницы, фильтр, slice[offset:offset+limit].
     """
     if not _is_configured():
         return []
@@ -314,12 +360,12 @@ async def get_users_by_status(status: str, limit: int = 200, offset: int = 0) ->
     try:
         async with aiohttp.ClientSession() as session:
             all_results: list[dict] = []
-            api_offset = 0
+            page_num = 1
             while True:
                 params = {
                     "order_by": f"-{_F_CREATED_AT}",
                     "size": page_size,
-                    "offset": api_offset,
+                    "page": page_num,
                 }
                 async with session.get(
                     _rows_url(),
@@ -338,7 +384,7 @@ async def get_users_by_status(status: str, limit: int = 200, offset: int = 0) ->
                     all_results.extend(page_results)
                     if len(page_results) < page_size:
                         break
-                    api_offset += page_size
+                    page_num += 1
             users = [
                 row_to_user_dict(row)
                 for row in all_results
@@ -354,37 +400,49 @@ async def get_users_created_after_24h(limit: int = 10, offset: int = 0) -> list[
     """
     Пользователи, созданные за последние 24 часа.
     ORDER BY created_at DESC. Фильтрация по дате в Python.
+    Пагинация: перебираем все страницы API, затем применяем offset/limit.
     """
     if not _is_configured():
         return []
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    page_size = 200
+    page_num = 1
+    filtered: list[dict] = []
+
     try:
         async with aiohttp.ClientSession() as session:
-            params = {
-                "order_by": f"-{_F_CREATED_AT}",
-                "size": 200,
-            }
-            async with session.get(
-                _rows_url(),
-                headers=_headers(),
-                params=params,
-            ) as resp:
-                if resp.status != 200:
-                    logger.warning(
-                        "Baserow get_users_created_after_24h: status %s, body %s",
-                        resp.status,
-                        await resp.text(),
-                    )
-                    return []
-                data = await resp.json()
-                results = data.get("results", [])
-                filtered = []
-                for row in results:
-                    dt = _parse_created_at(row.get(_F_CREATED_AT))
-                    if dt is not None and dt >= cutoff:
-                        filtered.append(row_to_user_dict(row))
-                return filtered[offset : offset + limit]
+            while True:
+                params = {
+                    "order_by": f"-{_F_CREATED_AT}",
+                    "size": page_size,
+                    "page": page_num,
+                }
+                async with session.get(
+                    _rows_url(),
+                    headers=_headers(),
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        logger.warning(
+                            "Baserow get_users_created_after_24h: status %s, body %s",
+                            resp.status,
+                            await resp.text(),
+                        )
+                        break
+                    data = await resp.json()
+                    results = data.get("results", [])
+                    for row in results:
+                        dt = _parse_created_at(row.get(_F_CREATED_AT))
+                        if dt is not None and dt >= cutoff:
+                            filtered.append(row_to_user_dict(row))
+                        elif dt is not None and dt < cutoff:
+                            # rows are DESC by created_at — no more matches possible
+                            return filtered[offset : offset + limit]
+                    if len(results) < page_size:
+                        break
+                    page_num += 1
+        return filtered[offset : offset + limit]
     except Exception as e:
         logger.warning("Baserow get_users_created_after_24h error: %s", e)
         return []
@@ -397,7 +455,7 @@ async def get_new_leads_count() -> int:
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     total = 0
-    offset = 0
+    page_num = 1
     page_size = 200
 
     try:
@@ -406,7 +464,7 @@ async def get_new_leads_count() -> int:
                 params = {
                     "order_by": f"-{_F_CREATED_AT}",
                     "size": page_size,
-                    "offset": offset,
+                    "page": page_num,
                 }
                 async with session.get(
                     _rows_url(),
@@ -429,7 +487,7 @@ async def get_new_leads_count() -> int:
                     total += page_count
                     if len(results) < page_size:
                         break
-                    offset += page_size
+                    page_num += 1
         return total
     except Exception as e:
         logger.warning("Baserow get_new_leads_count error: %s", e)
@@ -440,16 +498,19 @@ async def get_recent_users(limit: int = 20, offset: int = 0) -> list[dict]:
     """
     Получить последних пользователей по дате создания (для CRM-панели).
     ORDER BY created_at DESC. Поддержка пагинации.
+    Baserow использует page (с 1), offset конвертируется в номер страницы.
     """
     if not _is_configured():
         return []
+
+    page_num = (offset // limit) + 1 if limit > 0 else 1
 
     try:
         async with aiohttp.ClientSession() as session:
             params = {
                 "order_by": f"-{_F_CREATED_AT}",
                 "size": limit,
-                "offset": offset,
+                "page": page_num,
             }
             async with session.get(
                 _rows_url(),
@@ -469,6 +530,105 @@ async def get_recent_users(limit: int = 20, offset: int = 0) -> list[dict]:
     except Exception as e:
         logger.warning("Baserow get_recent_users error: %s", e)
         return await _get_recent_users_fallback(limit, offset)
+
+
+_LEADS_EXCLUDE_STATUSES = {
+    "Broker ID получен",
+    "Ожидаем депозит",
+    "Ожидаем Broker ID",
+    "Сообщение в поддержку",
+    "Доступ выдан",
+    "Отклонен",
+    "Спам",
+}
+
+
+async def get_leads_users(limit: int = 200, offset: int = 0) -> list[dict]:
+    """
+    Лиды — все строки, чей статус не входит в список финальных/клиентских статусов.
+    Пагинация: fetch все страницы по 200, фильтр в Python, slice[offset:offset+limit].
+    """
+    if not _is_configured():
+        return []
+
+    page_size = 200
+    page_num = 1
+    filtered: list[dict] = []
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            while True:
+                params = {
+                    "order_by": f"-{_F_CREATED_AT}",
+                    "size": page_size,
+                    "page": page_num,
+                }
+                async with session.get(
+                    _rows_url(),
+                    headers=_headers(),
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        logger.warning(
+                            "Baserow get_leads_users: status %s, body %s",
+                            resp.status,
+                            await resp.text(),
+                        )
+                        break
+                    data = await resp.json()
+                    results = data.get("results", [])
+                    for row in results:
+                        if _field_to_str(row.get(_F_STATUS)) not in _LEADS_EXCLUDE_STATUSES:
+                            filtered.append(row)
+                    if len(results) < page_size:
+                        break
+                    page_num += 1
+        return [row_to_user_dict(row) for row in filtered][offset : offset + limit]
+    except Exception as e:
+        logger.warning("Baserow get_leads_users error: %s", e)
+        return []
+
+
+async def get_leads_count() -> int:
+    """Количество лидов (строки, не входящие в финальные/клиентские статусы)."""
+    if not _is_configured():
+        return 0
+
+    page_size = 200
+    page_num = 1
+    total = 0
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            while True:
+                params = {
+                    "size": page_size,
+                    "page": page_num,
+                }
+                async with session.get(
+                    _rows_url(),
+                    headers=_headers(),
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        logger.warning(
+                            "Baserow get_leads_count: status %s, body %s",
+                            resp.status,
+                            await resp.text(),
+                        )
+                        break
+                    data = await resp.json()
+                    results = data.get("results", [])
+                    for row in results:
+                        if _field_to_str(row.get(_F_STATUS)) not in _LEADS_EXCLUDE_STATUSES:
+                            total += 1
+                    if len(results) < page_size:
+                        break
+                    page_num += 1
+        return total
+    except Exception as e:
+        logger.warning("Baserow get_leads_count error: %s", e)
+        return 0
 
 
 async def _get_recent_users_fallback(limit: int, offset: int = 0) -> list[dict]:

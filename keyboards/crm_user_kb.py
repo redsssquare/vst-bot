@@ -18,6 +18,7 @@ def get_user_card_keyboard(
         [InlineKeyboardButton(text="✅ Доступ выдан", callback_data=f"crm_access_{telegram_id}")],
         [InlineKeyboardButton(text="❌ Отклонить", callback_data=f"crm_reject_{telegram_id}")],
         [InlineKeyboardButton(text="🚫 Спам", callback_data=f"crm_spam_{telegram_id}")],
+        [InlineKeyboardButton(text="💰 Запросить депозит", callback_data=f"crm_deposit_request_{telegram_id}")],
     ]
     if list_type is not None and total is not None:
         rows.append([InlineKeyboardButton(text="➡ Следующий лид", callback_data="crm_next_lead")])

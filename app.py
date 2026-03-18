@@ -14,10 +14,19 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import Update
 
 import config
+
+
+class MessageLogMiddleware:
+    async def __call__(self, handler, event, data):
+        if event.message:
+            print("CHAT_ID:", event.message.chat.id)
+            print("USER_ID:", event.message.from_user.id if event.message.from_user else None)
+        return await handler(event, data)
 from handlers import crm_router, registration_router, start_router
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
+dp.update.middleware(MessageLogMiddleware())
 dp.include_router(start_router)
 dp.include_router(crm_router)
 dp.include_router(registration_router)

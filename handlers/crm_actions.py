@@ -1,13 +1,15 @@
 """CRM действия — написать, доступ, отклонить, спам."""
 
 import logging
+import re
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 import config
 import state_manager
 from utils.admin_access import has_crm_access
+from utils.format_helpers import format_datetime
 from services import crm_service
 from keyboards import get_user_card_keyboard
 
@@ -25,7 +27,7 @@ def _format_card_for_refresh(card: dict) -> str:
     telegram_id = card.get("telegram_id") or "—"
     broker_id = card.get("broker_id") or "—"
     status = card.get("status") or "—"
-    created_at = card.get("created_at") or "—"
+    created_at = format_datetime(card.get("created_at"))
     lines = [
         f"👤 {first_name}",
         "",
@@ -221,3 +223,91 @@ async def handle_crm_spam(callback: CallbackQuery) -> None:
 
     await callback.answer()
     logger.info("CRM: status updated", extra={"target_id": target_id, "action": "spam"})
+
+
+@router.callback_query(F.data.startswith("crm_deposit_request_"))
+async def handle_crm_deposit_request(callback: CallbackQuery) -> None:
+    """crm_deposit_request_{id}: показать выбор суммы депозита."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not await has_crm_access(callback.bot, user_id):
+        await callback.answer("Доступ запрещён", show_alert=True)
+        return
+
+    raw = callback.data.removeprefix("crm_deposit_request_")
+    if not raw or not raw.isdigit():
+        await callback.answer("Ошибка: неверный ID", show_alert=True)
+        return
+
+    target_id = int(raw)
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="3000 RUB", callback_data=f"crm_deposit_confirm_{target_id}_3000rub"),
+                InlineKeyboardButton(text="30 USD", callback_data=f"crm_deposit_confirm_{target_id}_30usd"),
+            ],
+            [InlineKeyboardButton(text="⬅ Назад", callback_data=f"crm_user_{target_id}")],
+        ]
+    )
+    await callback.message.edit_text(
+        f"Выберите сумму депозита для пользователя {target_id}:",
+        reply_markup=kb,
+    )
+    await callback.answer()
+    logger.info("CRM: deposit_request initiated manager_id=%s target_id=%s", user_id, target_id)
+
+
+DEPOSIT_MESSAGES = {
+    "3000rub": (
+        "Для активации аккаунта необходимо пополнение от 3000р\n\n"
+        "Тестирование будет проходить на демо.\n\n"
+        "После пополнения напишите сюда."
+    ),
+    "30usd": (
+        "Для активации аккаунта необходимо пополнение от 30$\n\n"
+        "Тестирование будет проходить на демо.\n\n"
+        "После пополнения напишите сюда."
+    ),
+}
+
+
+@router.callback_query(F.data.regexp(r"^crm_deposit_confirm_(\d+)_(3000rub|30usd)$"))
+async def handle_crm_deposit_confirm(callback: CallbackQuery) -> None:
+    """crm_deposit_confirm_{id}_{amount}: отправить запрос депозита пользователю и обновить статус."""
+    user_id = callback.from_user.id if callback.from_user else 0
+    if not await has_crm_access(callback.bot, user_id):
+        await callback.answer("Доступ запрещён", show_alert=True)
+        return
+
+    m = re.match(r"^crm_deposit_confirm_(\d+)_(3000rub|30usd)$", callback.data)
+    if not m:
+        await callback.answer("Ошибка разбора данных", show_alert=True)
+        return
+
+    target_id = int(m.group(1))
+    amount = m.group(2)
+
+    deposit_text = DEPOSIT_MESSAGES.get(amount, "Пожалуйста, внесите депозит.")
+    try:
+        await callback.bot.send_message(target_id, deposit_text)
+    except Exception as e:
+        logger.warning("CRM: deposit message send failed target_id=%s: %s", target_id, e)
+
+    ok = await crm_service.set_waiting_deposit(target_id)
+    if not ok:
+        await callback.answer("Пользователь не найден", show_alert=True)
+        return
+
+    card = await crm_service.get_user_card(target_id)
+    if card:
+        text = _format_card_for_refresh(card)
+        kb = get_user_card_keyboard(
+            target_id,
+            list_type=state_manager.get_crm_list_source(user_id),
+            page=state_manager.get_crm_list_page(user_id),
+            index_in_page=state_manager.get_crm_list_user_index(user_id) or 0,
+            total=state_manager.get_crm_list_total(user_id),
+        )
+        await callback.message.edit_text(text, reply_markup=kb)
+
+    await callback.answer()
+    logger.info("CRM: deposit_confirmed manager_id=%s target_id=%s amount=%s", user_id, target_id, amount)

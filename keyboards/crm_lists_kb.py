@@ -9,17 +9,20 @@ def get_user_list_keyboard(
     page: int = 0,
     total_pages: int = 1,
     show_back: bool = True,
+    page_offset: int = 0,
 ) -> InlineKeyboardMarkup:
     """
     Клавиатура со списком пользователей.
     Каждый пользователь — кнопка с callback_data crm_user_{telegram_id}.
     list_type, page, total_pages — для пагинации (⬅ Назад | Стр N/M | ➡ Далее).
+    page_offset — глобальный номер первого элемента на странице.
     """
     rows = []
-    for u in users:
+    for i, u in enumerate(users):
         first_name = u.get("first_name") or "—"
         username = u.get("telegram_username") or ""
-        text = f"{first_name} (@{username})" if username else first_name
+        num = page_offset + i + 1
+        text = f"{num}. {first_name} (@{username})" if username else f"{num}. {first_name}"
         if len(text) > 50:
             text = text[:47] + "..."
         rows.append([
