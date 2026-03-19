@@ -47,6 +47,16 @@ def _step_is_awaiting_support_message(user_id: int) -> bool:
     return state_manager.get_step(user_id) == "awaiting_support_message"
 
 
+async def _send_to_admin(bot, user_id: int, text: str) -> None:
+    """Отправить уведомление в топик пользователя, если есть, иначе в General."""
+    topic_id = await baserow.get_topic_id(user_id)
+    await bot.send_message(
+        config.ADMIN_CHAT_ID,
+        text,
+        message_thread_id=topic_id if topic_id else None,
+    )
+
+
 async def _handle_id_submission(
     message: Message,
     broker_id: str,
@@ -63,8 +73,8 @@ async def _handle_id_submission(
         f"Broker ID: {broker_id}\n\n"
         f"Действие: {action_text}"
     )
-    await message.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
     user_id = message.from_user.id if message.from_user else 0
+    await _send_to_admin(message.bot, user_id, admin_text)
     user = await baserow.get_user_by_telegram_id(user_id)
     if user is not None:
         await baserow.update_broker_id(user["id"], broker_id)
@@ -295,7 +305,7 @@ async def handle_reconnect_request(callback: CallbackQuery) -> None:
         f"{user_info}\n\n"
         "Действие: Ожидаем, пока пользователь напишет в поддержку брокера и вернётся с новым Broker ID."
     )
-    await callback.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
+    await _send_to_admin(callback.bot, user_id, admin_text)
     await callback.answer()
 
 
@@ -356,7 +366,7 @@ async def handle_support_message_input(message: Message) -> None:
         f"Текст сообщения:\n{text}\n\n"
         "Действие: Ответьте пользователю через Telegram."
     )
-    await message.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
+    await _send_to_admin(message.bot, user_id, admin_text)
     user_id = message.from_user.id if message.from_user else 0
     user = await baserow.get_user_by_telegram_id(user_id)
     if user is not None:

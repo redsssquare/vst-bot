@@ -10,7 +10,7 @@ import config
 import state_manager
 from utils.admin_access import has_crm_access
 from utils.format_helpers import format_datetime
-from services import crm_service
+from services import crm_service, baserow
 from keyboards import get_user_card_keyboard
 
 router = Router(name="crm_actions")
@@ -18,6 +18,16 @@ logger = logging.getLogger(__name__)
 
 CRM_WRITE_PROMPT = "Отправьте сообщение для пересылки пользователю"
 CRM_WRITE_SENT = "Сообщение отправлено"
+
+
+async def _send_to_admin(bot, user_telegram_id: int, text: str) -> None:
+    """Отправить уведомление в топик пользователя, если есть, иначе в General."""
+    topic_id = await baserow.get_topic_id(user_telegram_id)
+    await bot.send_message(
+        config.ADMIN_CHAT_ID,
+        text,
+        message_thread_id=topic_id if topic_id else None,
+    )
 
 
 def _format_card_for_refresh(card: dict) -> str:
@@ -119,7 +129,7 @@ async def handle_crm_access(callback: CallbackQuery) -> None:
 
     user_line = f"@{username}" if username else "—"
     admin_text = f"Менеджер выдал доступ\n\nUser\n{user_line}\nBroker ID\n{broker_id}"
-    await callback.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
+    await _send_to_admin(callback.bot, target_id, admin_text)
 
     if card:
         text = _format_card_for_refresh(card)
@@ -161,7 +171,7 @@ async def handle_crm_reject(callback: CallbackQuery) -> None:
 
     user_line = f"@{username}" if username else "—"
     admin_text = f"Менеджер отклонил пользователя\n\nUser\n{user_line}\nBroker ID\n{broker_id}"
-    await callback.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
+    await _send_to_admin(callback.bot, target_id, admin_text)
 
     if card:
         text = _format_card_for_refresh(card)
@@ -203,7 +213,7 @@ async def handle_crm_spam(callback: CallbackQuery) -> None:
 
     user_line = f"@{username}" if username else "—"
     admin_text = f"Менеджер пометил как спам\n\nUser\n{user_line}\nBroker ID\n{broker_id}"
-    await callback.bot.send_message(config.ADMIN_CHAT_ID, admin_text)
+    await _send_to_admin(callback.bot, target_id, admin_text)
 
     if card:
         text = _format_card_for_refresh(card)
