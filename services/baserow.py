@@ -20,6 +20,7 @@ _F_BROKER_ID         = "field_3560"
 _F_STATUS            = "field_3561"
 _F_CREATED_AT        = "field_3562"
 _F_LAST_EVENT        = "field_3563"
+_F_TOPIC_ID          = "field_7458"
 
 
 def _field_to_str(val) -> str:
@@ -94,6 +95,62 @@ async def get_user_by_telegram_id(telegram_id: int) -> dict | None:
                 return None
     except Exception as e:
         logger.warning("Baserow get_user_by_telegram_id error: %s", e)
+        return None
+
+
+async def get_user_by_topic_id(topic_id: int) -> dict | None:
+    """
+    Получить пользователя по topic_id.
+    GET с перебором результатов, возвращает первую найденную строку или None.
+    """
+    if not _is_configured():
+        return None
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            params = {"size": 200}
+            async with session.get(
+                _rows_url(),
+                headers=_headers(),
+                params=params,
+            ) as resp:
+                if resp.status != 200:
+                    logger.warning(
+                        "Baserow get_user_by_topic_id: status %s, body %s",
+                        resp.status,
+                        await resp.text(),
+                    )
+                    return None
+                data = await resp.json()
+                results = data.get("results", [])
+                for row in results:
+                    val = row.get(_F_TOPIC_ID)
+                    if val is not None and val != "":
+                        try:
+                            if int(val) == int(topic_id):
+                                return row
+                        except (ValueError, TypeError):
+                            pass
+                return None
+    except Exception as e:
+        logger.warning("Baserow get_user_by_topic_id error: %s", e)
+        return None
+
+
+async def get_topic_id(telegram_id: int) -> int | None:
+    """
+    Получить topic_id по telegram_id.
+    Вызывает get_user_by_telegram_id, возвращает int(row[_F_TOPIC_ID]) или None.
+    """
+    row = await get_user_by_telegram_id(telegram_id)
+    if row is None:
+        return None
+    val = row.get(_F_TOPIC_ID)
+    if val is None or val == "":
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
         return None
 
 
@@ -182,6 +239,32 @@ async def update_status(
                 return True
     except Exception as e:
         logger.warning("Baserow update_status error: %s", e)
+        return False
+
+
+async def set_topic_id(row_id: int, topic_id: int) -> bool:
+    """Обновить topic_id для строки."""
+    if not _is_configured():
+        return False
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.patch(
+                _row_url(row_id),
+                headers=_headers(),
+                json={_F_TOPIC_ID: topic_id},
+            ) as resp:
+                if resp.status != 200:
+                    logger.warning(
+                        "Baserow set_topic_id: status %s, body %s",
+                        resp.status,
+                        await resp.text(),
+                    )
+                    return False
+                logger.info("CRM: topic_id saved → %s", topic_id)
+                return True
+    except Exception as e:
+        logger.warning("Baserow set_topic_id error: %s", e)
         return False
 
 
