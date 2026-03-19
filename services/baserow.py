@@ -7,7 +7,12 @@ from datetime import datetime, timedelta, timezone
 import aiohttp
 
 import config
-from config.crm import BASEROW_TABLE_ID, BASEROW_TOKEN, BASEROW_URL
+from config.crm import (
+    BASEROW_TABLE_ID,
+    BASEROW_TOKEN,
+    BASEROW_URL,
+    BASEROW_LAST_SUPPORT_MESSAGE_FIELD_ID,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +26,7 @@ _F_STATUS            = "field_3561"
 _F_CREATED_AT        = "field_3562"
 _F_LAST_EVENT        = "field_3563"
 _F_TOPIC_ID          = "field_7458"
+_F_LAST_SUPPORT_MSG  = BASEROW_LAST_SUPPORT_MESSAGE_FIELD_ID if BASEROW_LAST_SUPPORT_MESSAGE_FIELD_ID else None
 
 
 def _field_to_str(val) -> str:
@@ -34,7 +40,7 @@ def _field_to_str(val) -> str:
 
 def row_to_user_dict(row: dict) -> dict:
     """Преобразовать строку Baserow в формат для CRM менеджера (публичный для crm_service)."""
-    return {
+    result = {
         "id": row.get("id"),
         "telegram_id": row.get(_F_TELEGRAM_ID),
         "telegram_username": _field_to_str(row.get(_F_TELEGRAM_USERNAME)),
@@ -43,6 +49,11 @@ def row_to_user_dict(row: dict) -> dict:
         "status": _field_to_str(row.get(_F_STATUS)),
         "created_at": _field_to_str(row.get(_F_CREATED_AT)),
     }
+    if _F_LAST_SUPPORT_MSG:
+        result["last_support_message"] = _field_to_str(row.get(_F_LAST_SUPPORT_MSG)) or None
+    else:
+        result["last_support_message"] = None
+    return result
 
 
 def _is_configured() -> bool:
@@ -101,37 +112,46 @@ async def get_user_by_telegram_id(telegram_id: int) -> dict | None:
 async def get_user_by_topic_id(topic_id: int) -> dict | None:
     """
     Получить пользователя по topic_id.
-    GET с перебором результатов, возвращает первую найденную строку или None.
+    Перебирает все страницы результатов.
     """
     if not _is_configured():
         return None
 
+    page_size = 200
+    page_num = 1
     try:
         async with aiohttp.ClientSession() as session:
-            params = {"size": 200}
-            async with session.get(
-                _rows_url(),
-                headers=_headers(),
-                params=params,
-            ) as resp:
-                if resp.status != 200:
-                    logger.warning(
-                        "Baserow get_user_by_topic_id: status %s, body %s",
-                        resp.status,
-                        await resp.text(),
-                    )
-                    return None
-                data = await resp.json()
-                results = data.get("results", [])
-                for row in results:
-                    val = row.get(_F_TOPIC_ID)
-                    if val is not None and val != "":
-                        try:
-                            if int(val) == int(topic_id):
-                                return row
-                        except (ValueError, TypeError):
-                            pass
-                return None
+            while True:
+                params = {"size": page_size, "page": page_num}
+                async with session.get(
+                    _rows_url(),
+                    headers=_headers(),
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        logger.warning(
+                            "Baserow get_user_by_topic_id: status %s, body %s",
+                            resp.status,
+                            await resp.text(),
+                        )
+                        return None
+                    data = await resp.json()
+                    results = data.get("results", [])
+                    # Логируем topic_id значения для диагностики (первая страница)
+                    if page_num == 1:
+                        sample = [row.get(_F_TOPIC_ID) for row in results[:5]]
+                        logger.warning("Baserow get_user_by_topic_id: looking for %s, sample topic_ids=%s", topic_id, sample)
+                    for row in results:
+                        val = row.get(_F_TOPIC_ID)
+                        if val is not None and val != "":
+                            try:
+                                if int(val) == int(topic_id):
+                                    return row
+                            except (ValueError, TypeError):
+                                pass
+                    if len(results) < page_size:
+                        return None
+                    page_num += 1
     except Exception as e:
         logger.warning("Baserow get_user_by_topic_id error: %s", e)
         return None
@@ -149,7 +169,8 @@ async def get_topic_id(telegram_id: int) -> int | None:
     if val is None or val == "":
         return None
     try:
-        return int(val)
+        val_int = int(val)
+        return val_int if val_int > 0 else None
     except (ValueError, TypeError):
         return None
 
@@ -239,6 +260,32 @@ async def update_status(
                 return True
     except Exception as e:
         logger.warning("Baserow update_status error: %s", e)
+        return False
+
+
+async def update_last_support_message(row_id: int, text: str) -> bool:
+    """Сохранить текст последнего сообщения в поддержку. Работает только если задан BASEROW_LAST_SUPPORT_MESSAGE_FIELD_ID."""
+    if not _F_LAST_SUPPORT_MSG or not _is_configured():
+        return False
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.patch(
+                _row_url(row_id),
+                headers=_headers(),
+                json={_F_LAST_SUPPORT_MSG: (text or "")[:10000]},
+            ) as resp:
+                if resp.status != 200:
+                    logger.warning(
+                        "Baserow update_last_support_message: status %s, body %s",
+                        resp.status,
+                        await resp.text(),
+                    )
+                    return False
+                logger.info("Baserow last_support_message saved for row %s", row_id)
+                return True
+    except Exception as e:
+        logger.warning("Baserow update_last_support_message error: %s", e)
         return False
 
 

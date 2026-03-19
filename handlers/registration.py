@@ -66,13 +66,9 @@ async def _handle_id_submission(
     user_reply: str,
 ) -> None:
     """Общая логика: уведомление админу, set_step(main), ответ пользователю."""
-    user_info = _format_user_info(message.from_user)
-    admin_text = (
-        f"{emoji} {header}\n\n"
-        f"{user_info}\n"
-        f"Broker ID: {broker_id}\n\n"
-        f"Действие: {action_text}"
-    )
+    username = (message.from_user.username if message.from_user else "") or "—"
+    user_line = f"@{username}" if username != "—" else "—"
+    admin_text = f"{emoji} {header}\n👤 {user_line} | Broker ID: {broker_id}"
     user_id = message.from_user.id if message.from_user else 0
     await _send_to_admin(message.bot, user_id, admin_text)
     user = await baserow.get_user_by_telegram_id(user_id)
@@ -265,23 +261,14 @@ async def handle_existing_id_input(message: Message) -> None:
     user_id = message.from_user.id if message.from_user else 0
     if state_manager.get_reconnect_flow(user_id):
         state_manager.set_reconnect_flow(user_id, False)
-        await _handle_id_submission(
-            message,
-            broker_id=raw,
-            header="Существующий аккаунт",
-            emoji="👤",
-            action_text="Проверьте, зарегистрирован ли аккаунт по нашей партнёрской ссылке. Если да — отправьте доступ.",
-            user_reply=ID_SUBMITTED_TEXT,
-        )
-    else:
-        await _handle_id_submission(
-            message,
-            broker_id=raw,
-            header="Существующий аккаунт",
-            emoji="👤",
-            action_text="Проверьте, зарегистрирован ли аккаунт по нашей партнёрской ссылке. Если да — отправьте доступ.",
-            user_reply=ID_SUBMITTED_TEXT,
-        )
+    await _handle_id_submission(
+        message,
+        broker_id=raw,
+        header="Существующий аккаунт",
+        emoji="👤",
+        action_text="Проверьте, зарегистрирован ли аккаунт по нашей партнёрской ссылке. Если да — отправьте доступ.",
+        user_reply=ID_SUBMITTED_TEXT,
+    )
 
 
 @router.callback_query(F.data == "existing:reconnect")
@@ -299,12 +286,9 @@ async def handle_reconnect_request(callback: CallbackQuery) -> None:
     user = await baserow.get_user_by_telegram_id(user_id)
     if user is not None:
         await baserow.update_status(user["id"], config.STATUS_WAITING_BROKER_ID, "awaiting_broker_id")
-    user_info = _format_user_info(callback.from_user)
-    admin_text = (
-        "🔁 Запрос на переподключение\n\n"
-        f"{user_info}\n\n"
-        "Действие: Ожидаем, пока пользователь напишет в поддержку брокера и вернётся с новым Broker ID."
-    )
+    username = (callback.from_user.username if callback.from_user else "") or "—"
+    user_line = f"@{username}" if username != "—" else "—"
+    admin_text = f"🔁 Переподключение\n👤 {user_line}"
     await _send_to_admin(callback.bot, user_id, admin_text)
     await callback.answer()
 
@@ -358,19 +342,16 @@ async def handle_back_from_existing_account(callback: CallbackQuery) -> None:
 )
 async def handle_support_message_input(message: Message) -> None:
     """Обработка текста при state == awaiting_support_message: уведомление админу, ответ, main."""
-    user_info = _format_user_info(message.from_user)
-    text = (message.text or "").strip() or "(пусто)"
-    admin_text = (
-        "💬 Сообщение от пользователя\n\n"
-        f"{user_info}\n\n"
-        f"Текст сообщения:\n{text}\n\n"
-        "Действие: Ответьте пользователю через Telegram."
-    )
-    await _send_to_admin(message.bot, user_id, admin_text)
     user_id = message.from_user.id if message.from_user else 0
+    username = (message.from_user.username if message.from_user else "") or "—"
+    user_line = f"@{username}" if username != "—" else "—"
+    raw_text = (message.text or "").strip()
+    admin_text = f"💬 Сообщение\n👤 {user_line}\n\n{raw_text or '(пусто)'}"
+    await _send_to_admin(message.bot, user_id, admin_text)
     user = await baserow.get_user_by_telegram_id(user_id)
     if user is not None:
         await baserow.update_status(user["id"], config.STATUS_SUPPORT_MESSAGE, "support_message")
+        await baserow.update_last_support_message(user["id"], raw_text or "")
     state_manager.set_step(user_id, "main")
     await message.answer(SUPPORT_SENT_TEXT, reply_markup=get_main_menu_keyboard())
 

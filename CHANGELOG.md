@@ -2,6 +2,64 @@
 
 ## [Unreleased]
 
+### CRM: Написать открывает топик (2026-03-19)
+
+Кнопка «Написать» в карточке пользователя теперь показывает ссылку на топик в форум-группе вместо режима ввода сообщения в личку с ботом.
+
+**Детали:**
+- `handle_crm_write` получает/создаёт топик, формирует `t.me/c/{chat_id}/{topic_id}`, отвечает кнопкой «Открыть топик»
+- Удалены: `handle_crm_write_message`, `crm_write` state, `set_crm_write_target` / `get_crm_write_target` / `clear_crm_write_target`
+
+**Изменённые файлы:**
+- `handlers/crm_actions.py` — `handle_crm_write` (topic link)
+- `handlers/inbox.py` — удаление `handle_crm_write_message`
+- `state_manager.py` — удаление crm_write state и target helpers
+
+---
+
+### Inbox UX improvements (2026-03-19)
+
+**Stage 1 — Topic deduplication:**
+- `services/baserow.py`: `get_topic_id` treats 0 as None (`val_int > 0` check)
+- `handlers/inbox.py`: double-check `get_topic_id` before `create_forum_topic` to avoid duplicate topics
+
+**Stage 2 — Media support:**
+- `on_user_message` accepts: text, photo, video, document, voice, audio, sticker, video_note
+- Text: `send_message` (first) or `copy_message` (subsequent); media: `copy_message` with caption only when original empty
+- `on_manager_reply`: `copy_message` for all message types (text and media)
+
+**Stage 3 — Manager UX:**
+- Header (user info) only on first message (`topic_created_now`); subsequent messages via `copy_message` without header
+- Compact status notifications: ✅ Доступ выдан, ❌ Отклонён, 🚫 Спам, 🔁 Переподключение, 💬 Сообщение
+- `/info` command in topic: returns user card (name, Telegram ID, status, Broker ID, created_at)
+
+**Изменённые файлы:**
+- `handlers/inbox.py` — media handlers, `topic_created_now` logic, `on_info_command`, `copy_message` for manager replies
+- `handlers/registration.py` — `_send_to_admin` uses `get_topic_id` (topic routing)
+- `handlers/crm_actions.py` — `_send_to_admin` uses `get_topic_id` (topic routing)
+- `services/baserow.py` — `get_topic_id` returns None for 0 or empty
+
+---
+
+### Telegram Topics Inbox (2026-03-19)
+
+**Новые файлы:**
+- `handlers/inbox.py` — `on_user_message` (user → topic), `on_manager_reply` (topic → user)
+
+**Изменённые файлы:**
+- `services/baserow.py` — `_F_TOPIC_ID`, `get_topic_id(telegram_id)`, `set_topic_id(row_id, topic_id)`, `get_user_by_topic_id(topic_id)`
+- `handlers/__init__.py` — экспорт `inbox_router`
+- `app.py` — `dp.include_router(inbox_router)`
+
+**Функции:**
+- Сообщения пользователя (private) → пересылка в forum topic в `ADMIN_CHAT_ID`
+- При первом сообщении: создание topic (`create_forum_topic`), сохранение `topic_id` в Baserow
+- Ответы менеджера в topic → пересылка пользователю в private
+
+**Требования:** `ADMIN_CHAT_ID` — forum group; бот — admin с правами topic management. Поле Baserow: `topic_id`.
+
+---
+
 ### Bugfix: Media messages dropped in crm_write state (2026-03-19)
 
 **Проблема:** Фото, документы и другие медиа, отправленные менеджером CRM в состоянии `crm_write`, не пересылались пользователю — они молча игнорировались.

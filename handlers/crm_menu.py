@@ -48,7 +48,8 @@ def _format_support_list(users: list[dict], header: str, emoji: str, total_count
     for i, u in enumerate(users, 1):
         first_name = u.get("first_name") or "—"
         username = u.get("telegram_username") or ""
-        last_message = u.get("last_support_message") or "—"
+        raw_msg = u.get("last_support_message") or "—"
+        last_message = (raw_msg[:80] + "…") if raw_msg != "—" and len(raw_msg) > 80 else raw_msg
         lines.append(f"{i}. {first_name}")
         lines.append(f"@{username}" if username else "—")
         lines.append(f"Последнее сообщение: {last_message}")

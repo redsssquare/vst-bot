@@ -3,8 +3,8 @@
 import logging
 import re
 
-from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram import Bot, F, Router
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 import config
 import state_manager
@@ -15,9 +15,6 @@ from keyboards import get_user_card_keyboard
 
 router = Router(name="crm_actions")
 logger = logging.getLogger(__name__)
-
-CRM_WRITE_PROMPT = "Отправьте сообщение для пересылки пользователю"
-CRM_WRITE_SENT = "Сообщение отправлено"
 
 
 async def _send_to_admin(bot, user_telegram_id: int, text: str) -> None:
@@ -58,9 +55,17 @@ def _format_card_for_refresh(card: dict) -> str:
     return "\n".join(lines)
 
 
+def _chat_id_for_link(chat_id: int) -> str:
+    """Для t.me/c ссылок: -100xxxxxxxxxx → xxxxxxxxxx, иначе abs(chat_id)."""
+    s = str(chat_id)
+    if s.startswith("-100"):
+        return s[4:]
+    return str(abs(chat_id))
+
+
 @router.callback_query(F.data.startswith("crm_write_"))
-async def handle_crm_write(callback: CallbackQuery) -> None:
-    """crm_write_{id}: перевести в режим отправки сообщения пользователю."""
+async def handle_crm_write(callback: CallbackQuery, bot: Bot) -> None:
+    """crm_write_{id}: получить/создать топик и показать ссылку для переписки."""
     user_id = callback.from_user.id if callback.from_user else 0
     if not await has_crm_access(callback.bot, user_id):
         await callback.answer("Доступ запрещён", show_alert=True)
@@ -72,36 +77,39 @@ async def handle_crm_write(callback: CallbackQuery) -> None:
         return
 
     target_id = int(raw)
-    state_manager.set_step(user_id, "crm_write")
-    state_manager.set_crm_write_target(user_id, target_id)
-    await callback.message.answer(CRM_WRITE_PROMPT)
+    topic_id = await baserow.get_topic_id(target_id)
+
+    if topic_id is None:
+        row = await baserow.get_user_by_telegram_id(target_id)
+        if row is None:
+            await callback.answer("Пользователь не найден", show_alert=True)
+            return
+
+        card = await crm_service.get_user_card(target_id)
+        first_name = (card.get("first_name") or "User") if card else "User"
+        username = (card.get("telegram_username") or "no_username") if card else "no_username"
+        topic_name = f"{first_name} (@{username}) | ID: {target_id}"
+
+        try:
+            result = await bot.create_forum_topic(
+                chat_id=config.ADMIN_CHAT_ID,
+                name=topic_name,
+            )
+            topic_id = result.message_thread_id
+            await baserow.set_topic_id(row["id"], topic_id)
+        except Exception as e:
+            logger.warning("CRM: create_forum_topic failed target_id=%s: %s", target_id, e)
+            await callback.answer("Не удалось создать топик", show_alert=True)
+            return
+
+    chat_id_for_link = _chat_id_for_link(config.ADMIN_CHAT_ID)
+    url = f"https://t.me/c/{chat_id_for_link}/{topic_id}"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[[InlineKeyboardButton(text="📩 Открыть топик", url=url)]]
+    )
+    await callback.message.answer("Откройте топик для переписки:", reply_markup=kb)
     await callback.answer()
-    logger.info("CRM: crm_write started manager_id=%s target_id=%s", user_id, target_id)
-
-
-def _step_is_crm_write(msg: Message) -> bool:
-    return msg.from_user is not None and state_manager.get_step(msg.from_user.id) == "crm_write"
-
-
-@router.message(_step_is_crm_write)
-async def handle_crm_write_message(message: Message) -> None:
-    """Обработка сообщения в режиме crm_write: пересылка пользователю (текст и медиа)."""
-    user_id = message.from_user.id if message.from_user else 0
-    target_id = state_manager.get_crm_write_target(user_id)
-    if target_id is None:
-        state_manager.set_step(user_id, "main")
-        return
-
-    try:
-        await message.copy_to(target_id)
-    except Exception as e:
-        logger.warning("CRM: crm_write send failed target_id=%s: %s", target_id, e)
-        await message.answer("Не удалось отправить сообщение.")
-    else:
-        state_manager.clear_crm_write_target(user_id)
-        state_manager.set_step(user_id, "main")
-        await message.answer(CRM_WRITE_SENT)
-        logger.info("CRM: crm_write sent manager_id=%s target_id=%s", user_id, target_id)
+    logger.info("CRM: crm_write topic link manager_id=%s target_id=%s", user_id, target_id)
 
 
 @router.callback_query(F.data.startswith("crm_access_"))
@@ -128,7 +136,7 @@ async def handle_crm_access(callback: CallbackQuery) -> None:
     username = (card.get("telegram_username") or "") if card else ""
 
     user_line = f"@{username}" if username else "—"
-    admin_text = f"Менеджер выдал доступ\n\nUser\n{user_line}\nBroker ID\n{broker_id}"
+    admin_text = f"✅ Доступ выдан\n👤 {user_line} | Broker ID: {broker_id}"
     await _send_to_admin(callback.bot, target_id, admin_text)
 
     if card:
@@ -170,7 +178,7 @@ async def handle_crm_reject(callback: CallbackQuery) -> None:
     username = (card.get("telegram_username") or "") if card else ""
 
     user_line = f"@{username}" if username else "—"
-    admin_text = f"Менеджер отклонил пользователя\n\nUser\n{user_line}\nBroker ID\n{broker_id}"
+    admin_text = f"❌ Отклонён\n👤 {user_line} | Broker ID: {broker_id}"
     await _send_to_admin(callback.bot, target_id, admin_text)
 
     if card:
@@ -212,7 +220,7 @@ async def handle_crm_spam(callback: CallbackQuery) -> None:
     username = (card.get("telegram_username") or "") if card else ""
 
     user_line = f"@{username}" if username else "—"
-    admin_text = f"Менеджер пометил как спам\n\nUser\n{user_line}\nBroker ID\n{broker_id}"
+    admin_text = f"🚫 Спам\n👤 {user_line} | Broker ID: {broker_id}"
     await _send_to_admin(callback.bot, target_id, admin_text)
 
     if card:

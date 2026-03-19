@@ -42,6 +42,9 @@ def _format_user_card(card: dict) -> str:
         "Создан",
         created_at,
     ]
+    last_msg = card.get("last_support_message")
+    if last_msg:
+        lines.extend(["", "Последнее сообщение в поддержку", last_msg])
     return "\n".join(lines)
 
 

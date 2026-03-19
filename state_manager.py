@@ -37,21 +37,6 @@ def get_reconnect_flow(user_id: int) -> bool:
     return _storage.get(user_id, {}).get("reconnect_flow", False)
 
 
-def set_crm_write_target(user_id: int, target_telegram_id: int) -> None:
-    if user_id not in _storage:
-        _storage[user_id] = {}
-    _storage[user_id]["crm_write_target"] = target_telegram_id
-
-
-def get_crm_write_target(user_id: int) -> int | None:
-    return _storage.get(user_id, {}).get("crm_write_target")
-
-
-def clear_crm_write_target(user_id: int) -> None:
-    if user_id in _storage:
-        _storage[user_id].pop("crm_write_target", None)
-
-
 def set_broadcast_text(user_id: int, text: str) -> None:
     if user_id not in _storage:
         _storage[user_id] = {}

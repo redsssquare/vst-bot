@@ -19,6 +19,7 @@ telegram-bot/
 ├── handlers/
 │   ├── start.py        # /start, main menu, «Получить доступ», «Связаться с поддержкой»
 │   ├── registration.py # Registration branches, ID input, support, fallback
+│   ├── inbox.py        # Topics Inbox: user→topic, manager→user
 │   ├── crm_menu.py     # /crm command, user lists
 │   ├── crm_user_card.py# User card view
 │   ├── crm_actions.py  # Access/reject/spam actions
@@ -36,9 +37,11 @@ telegram-bot/
 
 | Variable | Type | Description |
 |----------|------|-------------|
-| `ADMIN_CHAT_ID` | int | Admin chat ID (from env; used for notifications and CRM access) |
+| `ADMIN_CHAT_ID` | int | Admin chat ID (from env; used for notifications, CRM access, Topics Inbox). Must be a forum group (supergroup with topics enabled). |
 | `SIGNAL_GROUP_LINK` | str | Link to signal group (for approved users) |
 | `AFFILIATE_LINK` | str | Affiliate registration link |
+
+**Topics Inbox:** `ADMIN_CHAT_ID` must point to a forum group. Bot must be admin with topic management permissions (create_forum_topic, manage_topics).
 
 **Admin notifications:** Messages sent to admin chat use format: emoji + header, user_info (Пользователь: @username or Без username), Broker ID (if applicable), action_text. Types: 🆕 Новая регистрация, 👤 Существующий аккаунт, 🔁 Запрос на переподключение, 💬 Сообщение от пользователя.
 
@@ -69,7 +72,23 @@ Admin panel for managing users. Access: only members of the chat with `ADMIN_CHA
 
 **Pagination:** 10 users per page. Navigation: «⬅ Назад» (to menu), «Стр N/M», «➡ Далее». Page state restored when returning from user card.
 
-**Actions:** View user card, grant access, reject, mark as spam, request deposit (💰 Запросить депозит — sets status to `Ожидаем депозит`, notifies user).
+**Actions:** View user card, grant access, reject, mark as spam, request deposit (💰 Запросить депозит — sets status to `Ожидаем депозит`, notifies user), write (💬 Написать — opens topic link for direct messaging in forum).
+
+## Topics Inbox
+
+Two-way messaging via Telegram forum topics. User messages in private chat are forwarded to a dedicated topic in the admin forum; manager replies in the topic are forwarded to the user. Managers write directly in topics (not via CRM bot DM). CRM action «Написать» opens the topic link.
+
+| Handler | Trigger | Action |
+|---------|---------|--------|
+| `on_user_message` | Text, photo, video, document, voice, audio, sticker, video_note from user (private) | Create topic on first contact; forward to topic. Topic name: `{first_name} (@{username}) \| ID: {user_id}`. First message: header with user info; subsequent: `copy_message` without header. Text via `send_message`, media via `copy_message` (caption only when original empty). |
+| `on_manager_reply` | Any message from manager in topic | Forward to user via `copy_message` (text and media) |
+| `on_info_command` | `/info` in topic | Reply with user card (name, Telegram ID, status, Broker ID, created_at) |
+
+**Topic deduplication:** `get_topic_id` treats 0 as None; double-check before `create_forum_topic` to avoid duplicate topics.
+
+**Status notifications:** CRM/registration actions send compact notifications to user topic (if exists) or General: ✅ Доступ выдан, ❌ Отклонён, 🚫 Спам, 🔁 Переподключение, 💬 Сообщение.
+
+**Requirements:** `ADMIN_CHAT_ID` = forum group; bot admin with topic management. User must exist in Baserow.
 
 ## Baserow CRM
 
@@ -80,8 +99,11 @@ Optional integration. If env vars are not set, CRM calls are no-op.
 | `BASEROW_URL` | Baserow instance URL (e.g. `https://baserow.example.com`) |
 | `BASEROW_TOKEN` | API token |
 | `BASEROW_TABLE_ID` | Table ID for users |
+| `BASEROW_LAST_SUPPORT_MESSAGE_FIELD_ID` | (опционально) ID поля Long text для хранения последнего сообщения в поддержку (например `field_12345`). Создайте поле в Baserow → получите ID через API `GET /api/database/fields/table/{table_id}/` → укажите в env. Без него в списке «Поддержка» будет «—». |
 
-**Table fields:** `telegram_id`, `telegram_username`, `first_name`, `status`, `last_event`, `created_at`, `broker_id`
+**Table fields:** `telegram_id`, `telegram_username`, `first_name`, `status`, `last_event`, `created_at`, `broker_id`, `topic_id`, `last_support_message` (опционально)
+
+**Inbox functions:** `get_topic_id(telegram_id)`, `set_topic_id(row_id, topic_id)`, `get_user_by_topic_id(topic_id)`
 
 **Funnel events (last_event):** `start`, `registration_started`, `broker_id_submitted`, `support_message`
 
