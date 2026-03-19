@@ -15,8 +15,11 @@ logger = logging.getLogger(__name__)
 
 # Шаги, при которых пользователь вводит данные — inbox не должен перехватывать сообщение
 _REGISTRATION_STEPS = {
+    "choose_account_status",
     "awaiting_new_registration_id",
+    "existing_account_options",
     "awaiting_existing_id",
+    "reconnect_instruction",
     "awaiting_support_message",
 }
 

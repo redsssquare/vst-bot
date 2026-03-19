@@ -378,7 +378,20 @@ async def handle_support_message_input(message: Message) -> None:
 # --- Fallback: текст в состояниях без ожидания ввода ---
 
 
-@router.message(F.text)
+_REGISTRATION_ACTIVE_STEPS = {
+    "choose_account_status",
+    "awaiting_new_registration_id",
+    "existing_account_options",
+    "awaiting_existing_id",
+    "reconnect_instruction",
+    "awaiting_support_message",
+}
+
+
+@router.message(
+    F.text,
+    lambda m: state_manager.get_step(m.from_user.id) in _REGISTRATION_ACTIVE_STEPS if m.from_user else False,
+)
 async def handle_text_fallback(message: Message) -> None:
-    """Необработанный текст вне сценария: информировать пользователя и показать кнопки без сброса шага."""
+    """Необработанный текст во время активного шага регистрации."""
     await message.answer(FALLBACK_TEXT, reply_markup=get_main_menu_keyboard())

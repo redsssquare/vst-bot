@@ -22,7 +22,7 @@ class MessageLogMiddleware:
             print("CHAT_ID:", event.message.chat.id)
             print("USER_ID:", event.message.from_user.id if event.message.from_user else None)
         return await handler(event, data)
-from handlers import crm_router, registration_router, start_router
+from handlers import crm_router, inbox_router, registration_router, start_router
 
 bot = Bot(token=config.BOT_TOKEN)
 dp = Dispatcher()
@@ -30,6 +30,7 @@ dp.update.middleware(MessageLogMiddleware())
 dp.include_router(start_router)
 dp.include_router(crm_router)
 dp.include_router(registration_router)
+dp.include_router(inbox_router)
 
 
 async def on_startup(_: web.Application) -> None:
