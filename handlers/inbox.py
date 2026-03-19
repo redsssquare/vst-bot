@@ -21,6 +21,7 @@ _REGISTRATION_STEPS = {
     "awaiting_existing_id",
     "reconnect_instruction",
     "awaiting_support_message",
+    "crm_write",
 }
 
 
