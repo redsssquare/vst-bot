@@ -99,6 +99,11 @@ async def get_leads_count() -> int:
     return await baserow.get_leads_count()
 
 
+async def get_leads_broadcast_telegram_ids() -> list[int]:
+    """Telegram ID лидов для рассылки (статусы: Новый пользователь, Начал регистрацию, Ожидаем Broker ID)."""
+    return await baserow.get_leads_telegram_ids_for_broadcast()
+
+
 async def set_waiting_deposit(telegram_id: int) -> bool:
     """Перевести пользователя в статус «Ожидаем депозит»."""
     row = await baserow.get_user_by_telegram_id(telegram_id)
@@ -113,12 +118,11 @@ async def set_waiting_deposit(telegram_id: int) -> bool:
 
 
 async def get_menu_counts() -> dict[str, int]:
-    """Counters для CRM меню: ready, waiting, deposit, new_leads, support, clients, leads."""
-    ready, waiting, deposit, new_leads, support, clients, leads = await asyncio.gather(
+    """Counters для CRM меню: ready, waiting, deposit, support, clients, leads."""
+    ready, waiting, deposit, support, clients, leads = await asyncio.gather(
         get_ready_count(),
         get_waiting_count(),
         get_waiting_deposit_count(),
-        get_new_leads_count(),
         get_support_count(),
         get_clients_count(),
         get_leads_count(),
@@ -127,7 +131,6 @@ async def get_menu_counts() -> dict[str, int]:
         "ready": ready,
         "waiting": waiting,
         "deposit": deposit,
-        "new_leads": new_leads,
         "support": support,
         "clients": clients,
         "leads": leads,

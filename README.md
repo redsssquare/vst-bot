@@ -21,7 +21,8 @@ telegram-bot/
 │   ├── registration.py # Registration branches, ID input, support, fallback
 │   ├── crm_menu.py     # /crm command, user lists
 │   ├── crm_user_card.py# User card view
-│   └── crm_actions.py  # Access/reject/spam actions
+│   ├── crm_actions.py  # Access/reject/spam actions
+│   └── leads_broadcast.py # /leads_send broadcast to leads
 ├── services/
 │   ├── baserow.py      # Baserow API (get_user, create_user, get_recent_users, etc.)
 │   └── crm_service.py  # CRM business logic (get_new_users, get_user_card, set_access_granted, etc.)
@@ -48,6 +49,9 @@ Admin panel for managing users. Access: only members of the chat with `ADMIN_CHA
 | Command | Description |
 |---------|-------------|
 | `/crm` | Open CRM menu (7 sections with counters) |
+| `/leads_send` | Broadcast message to leads (target statuses: Новый пользователь, Начал регистрацию, Ожидаем Broker ID) |
+
+**Broadcast flow:** Input text → mandatory confirmation → send or cancel. Report with sent/failed counts after completion.
 
 **Sections (7):**
 

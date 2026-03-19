@@ -542,6 +542,60 @@ _LEADS_EXCLUDE_STATUSES = {
     "Спам",
 }
 
+_BROADCAST_LEAD_STATUSES = {
+    "Новый пользователь",
+    "Начал регистрацию",
+    "Ожидаем Broker ID",
+}
+
+
+async def get_leads_telegram_ids_for_broadcast() -> list[int]:
+    """Все telegram_id лидов для рассылки (без pagination limit)."""
+    if not _is_configured():
+        return []
+
+    page_size = 200
+    page_num = 1
+    result: list[int] = []
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            while True:
+                params = {
+                    "order_by": f"-{_F_CREATED_AT}",
+                    "size": page_size,
+                    "page": page_num,
+                }
+                async with session.get(
+                    _rows_url(),
+                    headers=_headers(),
+                    params=params,
+                ) as resp:
+                    if resp.status != 200:
+                        logger.warning(
+                            "Baserow get_leads_telegram_ids_for_broadcast: status %s, body %s",
+                            resp.status,
+                            await resp.text(),
+                        )
+                        break
+                    data = await resp.json()
+                    results = data.get("results", [])
+                    for row in results:
+                        if _field_to_str(row.get(_F_STATUS)) in _BROADCAST_LEAD_STATUSES:
+                            val = row.get(_F_TELEGRAM_ID)
+                            if val is not None and val != "":
+                                try:
+                                    result.append(int(val))
+                                except (ValueError, TypeError):
+                                    pass
+                    if len(results) < page_size:
+                        break
+                    page_num += 1
+        return result
+    except Exception as e:
+        logger.warning("Baserow get_leads_telegram_ids_for_broadcast error: %s", e)
+        return []
+
 
 async def get_leads_users(limit: int = 200, offset: int = 0) -> list[dict]:
     """

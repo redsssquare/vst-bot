@@ -2,6 +2,41 @@
 
 ## [Unreleased]
 
+### Bugfix: Media messages dropped in crm_write state (2026-03-19)
+
+**Проблема:** Фото, документы и другие медиа, отправленные менеджером CRM в состоянии `crm_write`, не пересылались пользователю — они молча игнорировались.
+
+**Причина:**
+- Фильтр `F.text` на `@router.message` отклонял все нетекстовые сообщения до входа в обработчик
+- `bot.send_message()` поддерживает только текст, что делало пересылку медиа невозможной даже при исправлении фильтра
+
+**Исправление:**
+- Удалён фильтр `F.text` из `@router.message` — обработчик теперь срабатывает для всех типов сообщений в состоянии `crm_write`
+- `await message.bot.send_message(target_id, text)` заменено на `await message.copy_to(target_id)` — работает универсально для любого типа контента
+
+**Изменённые файлы:**
+- `handlers/crm_actions.py` (строки 76–97)
+
+---
+
+### Broadcast /leads_send (2026-03-18)
+
+**Новые файлы:**
+- `handlers/leads_broadcast.py` — команда `/leads_send`, flow рассылки (ввод текста → подтверждение → отправка/отмена), отчёт
+
+**Изменённые файлы:**
+- `services/baserow.py` — `_BROADCAST_LEAD_STATUSES` (Новый пользователь, Начал регистрацию, Ожидаем Broker ID), `get_leads_telegram_ids_for_broadcast()`
+- `services/crm_service.py` — `get_leads_broadcast_telegram_ids()`
+- `state_manager.py` — `set_broadcast_text`, `get_broadcast_text`, `clear_broadcast_text`
+- `handlers/__init__.py` — добавлен `leads_broadcast_router` в `crm_router`
+
+**Функции:**
+- `/leads_send` — рассылка сообщения лидам с целевыми статусами
+- Flow: ввод текста → обязательное подтверждение → отправка или отмена
+- Отчёт: количество отправленных и неудачных сообщений
+
+---
+
 ### CRM воронка — расширение (2026-03-18)
 
 **Новые файлы:**

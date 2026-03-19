@@ -73,22 +73,17 @@ def _step_is_crm_write(msg: Message) -> bool:
     return msg.from_user is not None and state_manager.get_step(msg.from_user.id) == "crm_write"
 
 
-@router.message(F.text, _step_is_crm_write)
+@router.message(_step_is_crm_write)
 async def handle_crm_write_message(message: Message) -> None:
-    """Обработка текста в режиме crm_write: пересылка пользователю."""
+    """Обработка сообщения в режиме crm_write: пересылка пользователю (текст и медиа)."""
     user_id = message.from_user.id if message.from_user else 0
     target_id = state_manager.get_crm_write_target(user_id)
     if target_id is None:
         state_manager.set_step(user_id, "main")
         return
 
-    text = (message.text or "").strip()
-    if not text:
-        await message.answer(CRM_WRITE_PROMPT)
-        return
-
     try:
-        await message.bot.send_message(target_id, text)
+        await message.copy_to(target_id)
     except Exception as e:
         logger.warning("CRM: crm_write send failed target_id=%s: %s", target_id, e)
         await message.answer("Не удалось отправить сообщение.")

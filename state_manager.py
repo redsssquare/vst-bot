@@ -52,6 +52,21 @@ def clear_crm_write_target(user_id: int) -> None:
         _storage[user_id].pop("crm_write_target", None)
 
 
+def set_broadcast_text(user_id: int, text: str) -> None:
+    if user_id not in _storage:
+        _storage[user_id] = {}
+    _storage[user_id]["broadcast_text"] = text
+
+
+def get_broadcast_text(user_id: int) -> str | None:
+    return _storage.get(user_id, {}).get("broadcast_text")
+
+
+def clear_broadcast_text(user_id: int) -> None:
+    if user_id in _storage:
+        _storage[user_id].pop("broadcast_text", None)
+
+
 def set_crm_list_source(user_id: int, source: str) -> None:
     """Сохранить источник списка: waiting, new, support, all."""
     if user_id not in _storage:

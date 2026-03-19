@@ -68,26 +68,6 @@ async def cmd_crm(message: Message) -> None:
     await message.answer(CRM_MENU_TEXT, reply_markup=get_crm_menu_keyboard(counts))
 
 
-@router.callback_query(F.data == "crm_new_leads")
-async def handle_crm_new_leads(callback: CallbackQuery) -> None:
-    """Список «Новые пользователи (24ч)»."""
-    user_id = callback.from_user.id if callback.from_user else 0
-    if not await has_crm_access(callback.bot, user_id):
-        await callback.answer(ACCESS_DENIED_TEXT, show_alert=True)
-        return
-    state_manager.set_crm_list_source(user_id, "new_leads")
-    state_manager.set_crm_list_page(user_id, 0)
-    state_manager.set_crm_list_users(user_id, users := await crm_service.get_new_leads_24h(limit=10, offset=0))
-    total = await crm_service.get_new_leads_count()
-    state_manager.set_crm_list_total(user_id, total)
-    total_pages = max(1, math.ceil(total / 10))
-    logger.info("CRM: users list loaded", extra={"list_type": "new_leads"})
-    text = _format_user_list(users, "Новые пользователи (24ч)", "🆕", total_count=total)
-    kb = get_user_list_keyboard(users, list_type="new_leads", page=0, total_pages=total_pages)
-    await callback.message.edit_text(text, reply_markup=kb)
-    await callback.answer()
-
-
 @router.callback_query(F.data == "crm_waiting")
 async def handle_crm_waiting(callback: CallbackQuery) -> None:
     """Список «Ожидаем Broker ID»."""
@@ -224,7 +204,7 @@ def _render_list(
     return text, kb
 
 
-@router.callback_query(F.data.regexp(r"^crm_(new_leads|waiting|ready|support|deposit|clients|leads)_page_(\d+)$"))
+@router.callback_query(F.data.regexp(r"^crm_(waiting|ready|support|deposit|clients|leads)_page_(\d+)$"))
 async def handle_crm_list_page(callback: CallbackQuery) -> None:
     """Переключение страницы списка: crm_{list_type}_page_{page}."""
     user_id = callback.from_user.id if callback.from_user else 0
@@ -243,11 +223,7 @@ async def handle_crm_list_page(callback: CallbackQuery) -> None:
     state_manager.set_crm_list_page(user_id, page)
     offset = page * 10
 
-    if list_type == "new_leads":
-        users = await crm_service.get_new_leads_24h(limit=10, offset=offset)
-        total = await crm_service.get_new_leads_count()
-        text, kb = _render_list(list_type, users, total, page, "Новые пользователи (24ч)", "🆕", page_offset=page * 10)
-    elif list_type == "waiting":
+    if list_type == "waiting":
         users = await crm_service.get_waiting_broker_id(limit=10, offset=offset)
         total = await crm_service.get_waiting_count()
         text, kb = _render_list(list_type, users, total, page, "Ожидаем Broker ID", "⏳", page_offset=page * 10)
@@ -310,12 +286,7 @@ async def handle_crm_back_to_list(callback: CallbackQuery) -> None:
     source = state_manager.get_crm_list_source(user_id) or "leads"
     page = state_manager.get_crm_list_page(user_id)
 
-    if source == "new_leads":
-        total = await crm_service.get_new_leads_count()
-        users = await crm_service.get_new_leads_24h(limit=10, offset=page * 10)
-        total_pages = max(1, math.ceil(total / 10))
-        text = _format_user_list(users, "Новые пользователи (24ч)", "🆕", total_count=total, page_offset=page * 10)
-    elif source == "waiting":
+    if source == "waiting":
         total = await crm_service.get_waiting_count()
         users = await crm_service.get_waiting_broker_id(limit=10, offset=page * 10)
         total_pages = max(1, math.ceil(total / 10))
